@@ -1,0 +1,29 @@
+camera:
+  source: 0                    # 0 = webcam, or "test_videos/crowd.mp4"
+  resolution: [320, 240]
+
+detection:
+  model_path: "models/yolov8n_ncnn_model"
+  confidence: 0.45
+  imgsz: 320
+
+density:
+  eps: 50
+  min_samples: 3
+  pixels_per_meter: 100
+  sigma: 30
+
+risk:
+  weights: [0.40, 0.20, 0.25, 0.15]   # density, speed, compression, chaos
+  warning_threshold: 0.55
+  critical_threshold: 0.75
+  window_size: 10
+
+mqtt:
+  broker: "localhost"                    # Change to RPi IP during hardware integration
+  port: 1883
+  topics:
+    metrics: "oracle/node1/metrics"
+    heatmap: "oracle/node1/heatmap"
+    actuation: "oracle/node1/actuation"
+    alert: "oracle/node1/alert"
