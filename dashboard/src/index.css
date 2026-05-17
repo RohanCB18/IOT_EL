@@ -1,0 +1,18 @@
+﻿*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  color-scheme: dark;
+  background: #020817;
+  color: #e2e8f0;
+  -webkit-font-smoothing: antialiased;
+}
+
+body { background: #020817; }
+
+#root {
+  width: 100%;
+  max-width: 100%;
+  min-height: 100svh;
+}

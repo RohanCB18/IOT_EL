@@ -1,5 +1,6 @@
 # Python
 venv/
+rpi-edge/.venv/
 __pycache__/
 *.pyc
 *.pyo
@@ -25,3 +26,6 @@ Thumbs.db
 
 # MQTT
 *.db
+
+# Local config (contains deployment-specific broker IP — commit config.example.yaml instead)
+rpi-edge/config.yaml
