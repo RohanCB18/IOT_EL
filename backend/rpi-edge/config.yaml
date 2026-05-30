@@ -3,7 +3,7 @@ camera:
   resolution: [320, 240]
 
 detection:
-  model_path: "models/yolov8n_ncnn_model"
+  model_path: "yolov8n.pt"
   confidence: 0.45
   imgsz: 320
 
@@ -20,10 +20,11 @@ risk:
   window_size: 10
 
 mqtt:
-  broker: "localhost"                    # Change to RPi IP during hardware integration
+  broker: "broker.hivemq.com"
   port: 1883
   topics:
-    metrics: "oracle/node1/metrics"
-    heatmap: "oracle/node1/heatmap"
-    actuation: "oracle/node1/actuation"
-    alert: "oracle/node1/alert"
+    metrics: "oracle_rohan_123/node1/metrics"
+    heatmap: "oracle_rohan_123/node1/heatmap"
+    actuation: "oracle_rohan_123/node1/actuation"
+    alert: "oracle_rohan_123/node1/alert"
+    camera: "oracle_rohan_123/node1/camera"

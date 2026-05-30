@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import mqtt from 'mqtt';
 
-const BROKER_URL = 'ws://localhost:9001';
+const BROKER_URL = 'ws://broker.hivemq.com:8000/mqtt';
 const MAX_TREND_POINTS = 120;   // ~60 s at ~2 fps
 const MAX_ALERTS       = 50;
 
@@ -24,9 +24,11 @@ export function useMqtt(brokerUrl = BROKER_URL) {
   const [connected,  setConnected]  = useState(false);
   const [metrics,    setMetrics]    = useState(DEFAULT_METRICS);
   const [heatmapB64, setHeatmapB64] = useState(null);
+  const [cameraB64,  setCameraB64]  = useState(null);
   const [actuation,  setActuation]  = useState(DEFAULT_ACTUATION);
   const [alerts,     setAlerts]     = useState([]);
   const [trendData,  setTrendData]  = useState([]);
+  const [flowData,   setFlowData]   = useState([]);
 
   const addAlert = useCallback((payload) => {
     setAlerts((prev) => [
@@ -45,7 +47,7 @@ export function useMqtt(brokerUrl = BROKER_URL) {
 
     client.on('connect', () => {
       setConnected(true);
-      client.subscribe('oracle/#', { qos: 0 });
+      client.subscribe('oracle_rohan_123/#', { qos: 0 });
     });
 
     client.on('disconnect', () => setConnected(false));
@@ -56,14 +58,19 @@ export function useMqtt(brokerUrl = BROKER_URL) {
       try {
         const raw = payload.toString();
 
-        if (topic === 'oracle/node1/heatmap') {
+        if (topic === 'oracle_rohan_123/node1/heatmap') {
           setHeatmapB64(raw);
+          return;
+        }
+
+        if (topic === 'oracle_rohan_123/node1/camera') {
+          setCameraB64(raw);
           return;
         }
 
         const data = JSON.parse(raw);
 
-        if (topic === 'oracle/node1/metrics') {
+        if (topic === 'oracle_rohan_123/node1/metrics') {
           setMetrics(data);
           setTrendData((prev) => {
             const point = {
@@ -73,9 +80,12 @@ export function useMqtt(brokerUrl = BROKER_URL) {
             };
             return [...prev, point].slice(-MAX_TREND_POINTS);
           });
-        } else if (topic === 'oracle/node1/actuation') {
+
+          // Generate dynamic flow vectors based on live metrics
+          setFlowData(generateFlowVectors(data.flow_mag, data.divergence, data.chaos));
+        } else if (topic === 'oracle_rohan_123/node1/actuation') {
           setActuation(data);
-        } else if (topic === 'oracle/node1/alert') {
+        } else if (topic === 'oracle_rohan_123/node1/alert') {
           if (data.level !== 'SAFE') addAlert(data);
         }
       } catch (e) {
@@ -88,5 +98,53 @@ export function useMqtt(brokerUrl = BROKER_URL) {
     };
   }, [brokerUrl, addAlert]);
 
-  return { connected, metrics, heatmapB64, actuation, alerts, trendData };
+  return { connected, metrics, heatmapB64, cameraB64, actuation, alerts, trendData, flowData };
+}
+
+// --- Dynamic Flow Vector Generator Helper ---
+function generateFlowVectors(flowMag, divergence, chaos) {
+  const vectors = [];
+  const cols = 6;
+  const rows = 5;
+  const W = 200;
+  const H = 150;
+  
+  const stepX = W / (cols + 1);
+  const stepY = H / (rows + 1);
+  
+  // Base angle representing global motion
+  const globalAngle = (Date.now() / 2500) % (2 * Math.PI); // slowly rotating global direction
+  
+  for (let c = 1; c <= cols; c++) {
+    for (let r = 1; r <= rows; r++) {
+      const x = c * stepX;
+      const y = r * stepY;
+      
+      // Calculate radial angle relative to center
+      const dx = 100 - x;
+      const dy = 75 - y;
+      const radialAngle = Math.atan2(dy, dx);
+      
+      // Interpolate base angle based on divergence magnitude
+      let baseAngle = globalAngle;
+      
+      if (divergence < -0.05) {
+        // Compress (towards center)
+        baseAngle = radialAngle;
+      } else if (divergence > 0.05) {
+        // Expand (away from center)
+        baseAngle = radialAngle + Math.PI;
+      }
+      
+      // Add chaos noise
+      const noise = (Math.random() - 0.5) * chaos * 0.8;
+      const angle = baseAngle + noise;
+      
+      // Add magnitude with individual variance
+      const magnitude = flowMag * (0.6 + Math.random() * 0.6);
+      
+      vectors.push({ x, y, angle, magnitude });
+    }
+  }
+  return vectors;
 }

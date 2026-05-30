@@ -21,7 +21,7 @@ function arcPath(cx, cy, r, startAngle, endAngle) {
   const [x1, y1] = polar(cx, cy, r, startAngle);
   const [x2, y2] = polar(cx, cy, r, endAngle);
   const large = endAngle - startAngle > Math.PI ? 1 : 0;
-  return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 0 ${x2} ${y2}`;
+  return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`;
 }
 
 function valueToAngle(v) {

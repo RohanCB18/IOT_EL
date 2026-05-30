@@ -77,6 +77,10 @@ class MQTTPublisher:
         """Publishes the base64-encoded heatmap image."""
         self._client.publish(self.topics["heatmap"], heatmap_b64, qos=0)
 
+    def publish_camera(self, camera_b64: str):
+        """Publishes the base64-encoded annotated camera feed image."""
+        self._client.publish(self.topics["camera"], camera_b64, qos=0)
+
     def publish_actuation(self, gate_command: str):
         """Publishes the gate command JSON."""
         payload = {

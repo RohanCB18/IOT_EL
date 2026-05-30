@@ -1,4 +1,4 @@
-﻿import './App.css';
+import './App.css';
 import { useMqtt }       from './hooks/useMqtt';
 import RiskGauge         from './components/RiskGauge';
 import RiskTrendChart    from './components/RiskTrendChart';
@@ -19,7 +19,7 @@ function ConnectionBadge({ connected }) {
 }
 
 export default function App() {
-  const { connected, metrics, heatmapB64, actuation, alerts, trendData } = useMqtt();
+  const { connected, metrics, heatmapB64, cameraB64, actuation, alerts, trendData, flowData } = useMqtt();
 
   return (
     <div className="app">
@@ -50,12 +50,12 @@ export default function App() {
 
         <section className="col-centre">
           <DensityHeatmap heatmapB64={heatmapB64} />
-          <CameraFeed frameB64={null} />
+          <CameraFeed frameB64={cameraB64} />
         </section>
 
         <section className="col-right">
           <RiskTrendChart trendData={trendData} />
-          <FlowVectorOverlay flowData={null} />
+          <FlowVectorOverlay flowData={flowData} />
           <AlertLog alerts={alerts} />
         </section>
       </main>

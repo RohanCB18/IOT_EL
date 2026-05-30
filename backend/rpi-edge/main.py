@@ -139,6 +139,14 @@ def run(config_path: str = "config.yaml", show_display: bool = True):
                 f"ttc={f'{ttc:.1f}s' if ttc else 'N/A'}"
             )
 
+            # Generate the fully annotated visualization frame (bounding boxes, heatmap, flow overlays, and HUD)
+            vis = detector.draw_detections(frame, centroids, boxes)
+            vis = mapper.overlay(vis, heatmap_bgr, labels, centroids, density, los_level)
+            vis = flow_analyser.overlay(vis, flow_bgr, flow_metrics, alpha=0.25)
+            vis = _annotate_hud(vis, len(centroids), density, los_level,
+                                risk_score, alert_level, gate_command,
+                                trend_slope, ttc)
+
             # ---- Phase 3B: MQTT publishing ----------------------------------
             if mqtt_pub.connected:
                 mqtt_pub.publish_metrics(
@@ -152,18 +160,16 @@ def run(config_path: str = "config.yaml", show_display: bool = True):
                 )
                 heatmap_b64 = encode_frame_base64(heatmap_bgr, quality=50)
                 mqtt_pub.publish_heatmap(heatmap_b64)
+                
+                # Publish the fully annotated live camera feed
+                camera_b64 = encode_frame_base64(vis, quality=55)
+                mqtt_pub.publish_camera(camera_b64)
+                
                 mqtt_pub.publish_actuation(gate_command)
                 mqtt_pub.publish_alert(alert_level, alert_msg, ttc)
 
             # ---- Display (optional) ----------------------------------------
             if show_display:
-                vis = detector.draw_detections(frame, centroids, boxes)
-                vis = mapper.overlay(vis, heatmap_bgr, labels, centroids, density, los_level)
-                vis = flow_analyser.overlay(vis, flow_bgr, flow_metrics, alpha=0.25)
-                vis = _annotate_hud(vis, len(centroids), density, los_level,
-                                    risk_score, alert_level, gate_command,
-                                    trend_slope, ttc)
-
                 cv2.imshow("Oracle — Crowd Safety Pipeline", vis)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     print("[INFO] Quit requested.")

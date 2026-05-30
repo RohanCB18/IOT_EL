@@ -126,6 +126,10 @@ class RiskEngine:
         times  = np.array([t for t, _ in self._window], dtype=np.float64)
         scores = np.array([s for _, s in self._window], dtype=np.float64)
 
+        # Prevent singular matrix error (SVD division by zero) if all timestamps are identical
+        if times[-1] == times[0]:
+            return 0.0, None
+
         # Normalise times to seconds relative to window start
         t0     = times[0]
         times  = (times - t0) / 1000.0   # ms → s
