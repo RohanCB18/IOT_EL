@@ -1,6 +1,6 @@
 camera:
   source: "../test/test_videos/crowd3.mp4"
-  resolution: [640, 480]
+  resolution: [960, 540]
 
 detection:
   model_path: "yolov8s.pt"

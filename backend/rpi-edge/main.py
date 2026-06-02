@@ -15,6 +15,7 @@ import sys
 import time
 import cv2
 import yaml
+import numpy as np
 
 from detector     import PersonDetector
 from density      import DensityMapper
@@ -22,6 +23,35 @@ from optical_flow import OpticalFlowAnalyser
 from risk_engine  import RiskEngine
 from mqtt_client  import MQTTPublisher
 from utils        import encode_frame_base64
+
+
+def _draw_text_with_shadow(frame, text, org, font_face, font_scale, color, thickness=1):
+    """Draws text with a thick black drop shadow for absolute readability on any background."""
+    # Draw drop shadow (black, slightly thicker)
+    cv2.putText(frame, text, (org[0] + 1, org[1] + 1), font_face, font_scale, (0, 0, 0), thickness + 1, cv2.LINE_AA)
+    # Draw foreground text
+    cv2.putText(frame, text, org, font_face, font_scale, color, thickness, cv2.LINE_AA)
+
+
+def _create_dashboard_canvas(portrait_frame, target_w=960, target_h=540):
+    """Pillars the video frame into a clean, uniform landscape canvas to avoid stretching distortion."""
+    ph, pw = portrait_frame.shape[:2]
+    
+    # Scale to fit target height while preserving aspect ratio
+    scale = target_h / ph
+    nw = int(pw * scale)
+    nh = target_h
+    
+    resized = cv2.resize(portrait_frame, (nw, nh), interpolation=cv2.INTER_AREA)
+    
+    # Create black canvas
+    canvas = np.zeros((target_h, target_w, 3), dtype=np.uint8)
+    
+    # Center the resized frame
+    dx = (target_w - nw) // 2
+    canvas[0:target_h, dx:dx+nw] = resized
+    
+    return canvas, dx, nw
 
 
 # ---------------------------------------------------------------------------
@@ -42,10 +72,11 @@ def _open_capture(source):
     return cap
 
 
-def _annotate_hud(frame, count: int, density: float, level: str,
+def _annotate_hud(canvas, count: int, density: float, level: str,
                   risk_score: float, alert_level: str, gate_command: str,
-                  trend_slope: float, ttc, flow_mag: float, divergence: float, chaos: float):
-    """Writes a clean, modern HUD overlay with a semi-transparent background."""
+                  trend_slope: float, ttc, flow_mag: float, divergence: float, chaos: float,
+                  dx: int):
+    """Draws a clean sidebar HUD card in the left pillarbox margin of the canvas."""
     # Define Alert colors (BGR format)
     colours = {
         "SAFE":     (74, 222, 128),   # BGR mint green
@@ -77,35 +108,37 @@ def _annotate_hud(frame, count: int, density: float, level: str,
         ("Crowd Chaos:", f"{chaos:.3f} rad", (255, 255, 255)),
     ]
 
-    # Draw semi-transparent dark slate background box with ample padding
-    # Box dimensions: width = 250px, height = 270px
-    x1, y1 = 10, 10
-    x2, y2 = 260, 280
+    # Draw dark panel card in the left margin area
+    # Leave 15px margin around the card: x1=15, y1=15, x2=310, y2=525 (height=540)
+    x1, y1 = 15, 15
+    x2, y2 = 310, 525
     
-    overlay_box = frame.copy()
-    cv2.rectangle(overlay_box, (x1, y1), (x2, y2), (25, 18, 12), -1)  # Dark slate background
-    cv2.addWeighted(overlay_box, 0.8, frame, 0.2, 0, frame)
+    overlay = canvas.copy()
+    cv2.rectangle(overlay, (x1, y1), (x2, y2), (25, 20, 16), -1)  # Deep slate panel background
+    cv2.addWeighted(overlay, 0.90, canvas, 0.10, 0, canvas)
     
-    # Draw a thin borders themed with alert state for premium aesthetic
-    cv2.rectangle(frame, (x1, y1), (x2, y2), theme_colour, 1, cv2.LINE_AA)
+    # Draw themed border around the HUD card
+    cv2.rectangle(canvas, (x1, y1), (x2, y2), theme_colour, 1, cv2.LINE_AA)
 
-    y_offset = y1 + 18
+    y_offset = y1 + 30
+    line_spacing = 30  # Larger vertical spacing since we have 510px height
+    
     for label, value, val_color in hud_data:
         if label is None:
             # Draw section header
-            cv2.putText(frame, value, (x1 + 12, y_offset),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.38, val_color, 1, cv2.LINE_AA)
-            y_offset += 16
+            _draw_text_with_shadow(canvas, value, (x1 + 18, y_offset),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.45, val_color, thickness=1)
+            y_offset += line_spacing
         else:
             # Draw metric label in muted gray
-            cv2.putText(frame, label, (x1 + 12, y_offset),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.36, (180, 180, 180), 1, cv2.LINE_AA)
-            # Draw value aligned to the right (x = 125)
-            cv2.putText(frame, value, (x1 + 125, y_offset),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.38, val_color, 1, cv2.LINE_AA)
-            y_offset += 16
+            _draw_text_with_shadow(canvas, label, (x1 + 18, y_offset),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.42, (180, 180, 180), thickness=1)
+            # Draw value aligned to the right (x = 155)
+            _draw_text_with_shadow(canvas, value, (x1 + 155, y_offset),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.45, val_color, thickness=1)
+            y_offset += line_spacing
             
-    return frame
+    return canvas
 
 
 # ---------------------------------------------------------------------------
@@ -189,13 +222,19 @@ def run(config_path: str = "config.yaml", show_display: bool = True):
                 f"ttc={f'{ttc:.1f}s' if ttc else 'N/A'}"
             )
 
-            # Generate the fully annotated visualization frame (bounding boxes, heatmap, flow overlays, and HUD)
+            # Generate the fully annotated visualization frame (bounding boxes, heatmap, flow overlays)
             vis = detector.draw_detections(frame, centroids, boxes)
             vis = mapper.overlay(vis, heatmap_bgr, labels, centroids, density, los_level)
             vis = flow_analyser.overlay(vis, flow_bgr, flow_metrics, alpha=0.25)
-            vis = _annotate_hud(vis, len(centroids), density, los_level,
-                                risk_score, alert_level, gate_command,
-                                trend_slope, ttc, flow_mag, divergence, chaos)
+            
+            # Center the portrait frame into a landscape 960x540 canvas to lock aspect ratio
+            canvas, dx, nw = _create_dashboard_canvas(vis, target_w=960, target_h=540)
+            
+            # Draw side HUD metrics on the landscape canvas (in the black margin)
+            canvas = _annotate_hud(canvas, len(centroids), density, los_level,
+                                   risk_score, alert_level, gate_command,
+                                   trend_slope, ttc, flow_mag, divergence, chaos,
+                                   dx)
 
             # ---- Phase 3B: MQTT publishing ----------------------------------
             if mqtt_pub.connected:
@@ -211,8 +250,8 @@ def run(config_path: str = "config.yaml", show_display: bool = True):
                 heatmap_b64 = encode_frame_base64(heatmap_bgr, quality=50)
                 mqtt_pub.publish_heatmap(heatmap_b64)
                 
-                # Publish the fully annotated live camera feed
-                camera_b64 = encode_frame_base64(vis, quality=55)
+                # Publish the fully annotated live camera feed (using the dashboard canvas)
+                camera_b64 = encode_frame_base64(canvas, quality=55)
                 mqtt_pub.publish_camera(camera_b64)
                 
                 mqtt_pub.publish_actuation(gate_command)
@@ -220,7 +259,7 @@ def run(config_path: str = "config.yaml", show_display: bool = True):
 
             # ---- Display (optional) ----------------------------------------
             if show_display:
-                cv2.imshow("Oracle - Crowd Safety Pipeline", vis)
+                cv2.imshow("Oracle - Crowd Safety Pipeline", canvas)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     print("[INFO] Quit requested.")
                     break
