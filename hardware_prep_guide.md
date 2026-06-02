@@ -332,15 +332,54 @@ This architecture is robust, faster, and 100% verified to work out-of-the-box.
     *   The React Dashboard on your laptop connects to the same public broker and draws the dials and charts.
     *   The ESP32 connects to your phone's hotspot, reads the `GATE_OPEN/HALF/CLOSE` commands from the public broker, and moves the physical gate.
 
+## 🎥 Section 5: Presenting Successfully Using ONLY Your Built-in Laptop Camera
+
+If you cannot use an external USB webcam and your laptop's built-in webcam is the **only available camera option**, you can still deliver a highly professional and seamless live presentation. 
+
+Here are the two best strategies to set up your presentation using only the built-in camera:
+
 ---
 
-## 🎥 Section 5: Webcam vs. Built-in Laptop Camera for Presentation
+### **Strategy A: HDMI Screen Mirroring / Projector Setup (Highly Recommended)**
+This is the most professional layout. It keeps the dashboard fully visible to the evaluators while letting you point the laptop camera anywhere:
 
-### **Is your laptop's built-in webcam OK?**
-*   **Yes, for development and testing:** Your laptop's built-in webcam is perfectly fine for writing code, verifying detections, and calibrating thresholds.
-*   **No, for the final presentation (Visual Constraint):** 
-    During the live demonstration in front of the evaluators, you need the **laptop screen facing the audience/professors** so they can watch the React dashboard update in real-time. If you use your laptop's built-in webcam:
-    *   The camera will be pointed at *you* (the presenter) or the ceiling behind the evaluators.
-    *   If you try to turn the laptop around to capture your teammates walking or to show a simulated crowd, **the evaluators won't be able to see the dashboard screen.**
-    *   **The Solution:** Using an external **USB Webcam** plugged into your laptop allows you to point the camera at the floor, a doorway, or a mock setup, while keeping your laptop screen oriented toward the audience.
+1.  **Connect to a Projector/Monitor:** Connect your laptop to the lab's projector or an external monitor via HDMI.
+2.  **Duplicate Your Screen:** Set the display settings on your laptop to **"Duplicate"** (mirror).
+3.  **Position the Laptop:** Turn the physical laptop around so the built-in screen and webcam are pointing directly at the demonstration area where your teammates will simulate the crowd.
+4.  **How it Looks:** The evaluators can look at the massive projector screen to see the live React dashboard, metrics, and alerts in real-time, while your laptop's camera captures your teammates' movements perfectly.
+
+```
+       +-------------------------------------------------+
+       |         PROJECTOR SCREEN / EXTERNAL DISPLAY     |  <-- Evaluators watch this
+       |               (Dashboard Console)               |
+       +-------------------------------------------------+
+                                ^
+                                | (HDMI Cable)
+                                |
+ +-----------------------+      v      +---------------------------------+
+ |      YOUR TEAMMATES   | <=========> |           YOUR LAPTOP           |
+ |  (Simulating crowd    | (Webcam     |                                 |
+ |   in front of camera) |  line-of-   | (Keyboard facing teammates,     |
+ |                       |  sight)     |  screen/camera turned around)   |
+ +-----------------------+             +---------------------------------+
+```
+
+---
+
+### **Strategy B: Teammates-in-Background Setup (No Projector)**
+If there is no external display available, place your laptop on a table facing the evaluators:
+
+1.  **Presenter Positioning:** The main presenter stands to the side of the laptop so they do not block the screen or the camera's view.
+2.  **Crowd Area:** Your teammates stand behind the presenter or in the background of the room within the built-in webcam's field of view.
+3.  **Interactive Run:** As they group together or move dynamically in the background, the webcam captures them, and the screen facing the evaluators updates live.
+
+---
+
+### **Strategy C: Pre-recorded Video Demo (The Hybrid Option)**
+If the lab or presentation space is too cramped to physically simulate a crowd in front of the laptop:
+1.  **Configure for Video:** Run the pipeline using the configured `crowd2.mp4` video (as we just did in our test).
+2.  **Live Circuit Link:** The video running on your laptop will publish commands to the public HiveMQ broker.
+3.  **Active Physical Node:** Put your ESP32 circuit on the table right next to the laptop. 
+4.  **Result:** The evaluators will see the pre-recorded crowd walking on the screen, and see your physical servo gate, LEDs, and buzzer respond **live** on the table. This is extremely convincing and requires zero physical space!
+
 
