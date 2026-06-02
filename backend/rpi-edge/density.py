@@ -87,13 +87,14 @@ class DensityMapper:
         # Blend heatmap
         vis = cv2.addWeighted(vis, 1 - alpha, heatmap_bgr, alpha, 0)
 
-        # Draw cluster labels next to each centroid
+        # Draw cluster labels next to each centroid (only for clustered people, skipping noise to avoid clutter)
         for i, (cx, cy) in enumerate(centroids):
             lbl = labels[i] if len(labels) > i else -1
-            colour = (200, 200, 200) if lbl == -1 else (0, 255, 255)
-            tag    = "noise" if lbl == -1 else f"C{lbl}"
-            cv2.putText(vis, tag, (int(cx) + 5, int(cy) - 5),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.4, colour, 1)
+            if lbl >= 0:
+                colour = (0, 255, 255)  # Cyan for active cluster identifiers
+                tag    = f"C{lbl}"
+                cv2.putText(vis, tag, (int(cx) + 5, int(cy) - 5),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.35, colour, 1, cv2.LINE_AA)
 
         return vis
 

@@ -49,10 +49,10 @@ class PersonDetector:
         vis_frame = frame.copy()
         
         for (x1, y1, x2, y2), (cx, cy) in zip(boxes, centroids):
-            # Draw bounding box
-            cv2.rectangle(vis_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            # Draw centroid
-            cv2.circle(vis_frame, (int(cx), int(cy)), 4, (0, 0, 255), -1)
+            # Draw bounding box (sleek thickness 1)
+            cv2.rectangle(vis_frame, (x1, y1), (x2, y2), (0, 255, 0), 1)
+            # Draw centroid (sleek radius 3)
+            cv2.circle(vis_frame, (int(cx), int(cy)), 3, (0, 0, 255), -1)
             
         return vis_frame
 

@@ -46,32 +46,65 @@ def _annotate_hud(frame, count: int, density: float, level: str,
                   risk_score: float, alert_level: str, gate_command: str,
                   trend_slope: float, ttc, flow_mag: float, divergence: float, chaos: float):
     """Writes a clean, modern HUD overlay with a semi-transparent background."""
-    lines = [
-        f"People: {count}",
-        f"Density: {density:.2f} p/m^2 [{level}]",
-        f"Risk: {risk_score:.3f} [{alert_level}]",
-        f"Gate: {gate_command}",
-        f"Trend: {trend_slope:+.4f} R/s",
-        f"TTC: {f'{ttc:.1f}s' if ttc is not None else 'N/A'}",
-        f"Flow Speed: {flow_mag:.2f} px/f",
-        f"Divergence: {divergence:+.4f}",
-        f"Chaos: {chaos:.3f} rad",
-    ]
+    # Define Alert colors (BGR format)
     colours = {
-        "SAFE":     (128, 222, 74),   # BGR green
-        "WARNING":  (36, 191, 251),   # BGR amber
-        "CRITICAL": (68, 68, 239),    # BGR red
+        "SAFE":     (74, 222, 128),   # BGR mint green
+        "WARNING":  (36, 191, 251),   # BGR bright amber
+        "CRITICAL": (68, 68, 239),    # BGR bright vibrant red
     }
-    colour = colours.get(alert_level, (255, 255, 255))
+    theme_colour = colours.get(alert_level, (255, 255, 255))
+    
+    # Structure metrics into sections for supreme readability: (label, value, value_color)
+    hud_data = [
+        # --- Section 1: System Metrics ---
+        (None, "[ SYSTEM METRICS ]", (220, 220, 220)),
+        ("People Count:", f"{count}", (255, 255, 255)),
+        ("Density:", f"{density:.2f} p/m^2", theme_colour),
+        ("LOS Level:", f"{level}", theme_colour),
+        
+        # --- Section 2: Risk Analysis ---
+        (None, "[ RISK ANALYSIS ]", (220, 220, 220)),
+        ("Composite Risk:", f"{risk_score:.3f}", theme_colour),
+        ("Alert Level:", f"{alert_level}", theme_colour),
+        ("Gate Actuator:", f"{gate_command}", theme_colour),
+        
+        # --- Section 3: Motion Flow ---
+        (None, "[ MOTION FLOW ]", (220, 220, 220)),
+        ("Trend Slope:", f"{trend_slope:+.4f} R/s", (255, 255, 255)),
+        ("Time-To-Crit:", f"{f'{ttc:.1f}s' if ttc is not None else 'N/A'}", (255, 255, 255)),
+        ("Flow Speed:", f"{flow_mag:.2f} px/f", (255, 255, 255)),
+        ("Divergence:", f"{divergence:+.4f}", (255, 255, 255)),
+        ("Crowd Chaos:", f"{chaos:.3f} rad", (255, 255, 255)),
+    ]
 
-    # Draw semi-transparent dark slate-900 background box
+    # Draw semi-transparent dark slate background box with ample padding
+    # Box dimensions: width = 250px, height = 270px
+    x1, y1 = 10, 10
+    x2, y2 = 260, 280
+    
     overlay_box = frame.copy()
-    cv2.rectangle(overlay_box, (5, 5), (210, 180), (42, 23, 15), -1)
-    cv2.addWeighted(overlay_box, 0.7, frame, 0.3, 0, frame)
+    cv2.rectangle(overlay_box, (x1, y1), (x2, y2), (25, 18, 12), -1)  # Dark slate background
+    cv2.addWeighted(overlay_box, 0.8, frame, 0.2, 0, frame)
+    
+    # Draw a thin borders themed with alert state for premium aesthetic
+    cv2.rectangle(frame, (x1, y1), (x2, y2), theme_colour, 1, cv2.LINE_AA)
 
-    for i, line in enumerate(lines):
-        cv2.putText(frame, line, (12, 22 + i * 17),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, colour, 1, cv2.LINE_AA)
+    y_offset = y1 + 18
+    for label, value, val_color in hud_data:
+        if label is None:
+            # Draw section header
+            cv2.putText(frame, value, (x1 + 12, y_offset),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.38, val_color, 1, cv2.LINE_AA)
+            y_offset += 16
+        else:
+            # Draw metric label in muted gray
+            cv2.putText(frame, label, (x1 + 12, y_offset),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.36, (180, 180, 180), 1, cv2.LINE_AA)
+            # Draw value aligned to the right (x = 125)
+            cv2.putText(frame, value, (x1 + 125, y_offset),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.38, val_color, 1, cv2.LINE_AA)
+            y_offset += 16
+            
     return frame
 
 
@@ -103,6 +136,7 @@ def run(config_path: str = "config.yaml", show_display: bool = True):
 
     if show_display:
         cv2.namedWindow("Oracle - Crowd Safety Pipeline", cv2.WINDOW_NORMAL)
+        cv2.setWindowProperty("Oracle - Crowd Safety Pipeline", cv2.WND_PROP_ASPECT_RATIO, cv2.WINDOW_KEEPRATIO)
 
     frame_idx = 0
     try:
