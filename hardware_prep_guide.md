@@ -271,3 +271,76 @@ A live hardware demo is high-risk but high-reward. Follow this layout for a flaw
    - *Phase 2 (Warning):* Have 1 or 2 members step in front of the camera, waving their arms. The dashboard will register speed and density, the trend line will slope upward, and the servo will rotate to $90^{\circ}$ (Amber LED).
    - *Phase 3 (Critical):* Have 3+ members group closely in front of the camera. The DBSCAN clusters will merge, divergence will drop (representing compression), risk will cross `0.75`, the Red LED will flash, the buzzer will beep, and the gate will rotate to $180^{\circ}$ (closed).
 4. **The Ultimate Fail-safe:** Keep your captured demo videos queued in a media player tab. If the venue's Wi-Fi fails or a component behaves unexpectedly, pivot immediately to the pre-recorded video, explain the hardware/circuit via the video, and keep the presentation moving smoothly.
+
+---
+
+## 💻 Section 4: Laptop-as-Edge Fallback Architecture (No Raspberry Pi Required)
+
+If your team runs into issues setting up the Raspberry Pi in the lab (e.g., OS flash issues, network connection blocks, under-voltage, package install failures, or SSH lockouts), **you can completely bypass the Raspberry Pi and use your laptop as the Edge Processing Unit.**
+
+This architecture is robust, faster, and 100% verified to work out-of-the-box.
+
+### **1. Fallback System Architecture**
+
+```
++-----------------------------------------------------------------------+
+|                            YOUR LAPTOP                                |
+|                                                                       |
+|   +-----------------------+              +-------------------------+  |
+|   |   Python Pipeline     |              |     React Dashboard     |  |
+|   |      (main.py)        |              |  (ws://broker.hivemq...) |  |
+|   +-----------+-----------+              +------------^------------+  |
+|               | (Publishes metrics/feed)              | (Subscribes)  |
++---------------|---------------------------------------|---------------+
+                |                                       |
+                v                                       |
+     +--------------------------------------------------+---------------+
+     |              Public MQTT Broker (broker.hivemq.com:8000)          |
+     +----------------------------------+-------------------------------+
+                                        |
+                                        | (Subscribes to gate command)
+                                        v
+                            +-----------------------+
+                            |       ESP32 Node      |
+                            |  (Servo, LEDs, Buzz)  |
+                            +-----------------------+
+```
+
+### **2. Setup Steps for the Laptop-as-Edge Fallback**
+
+1.  **Skip RPi Steps:** You do not need to configure, flash, boot, or SSH into any Raspberry Pi.
+2.  **Power the ESP32:** Plug the ESP32 directly into your laptop's USB port (or a power bank) to supply it with power.
+3.  **Update ESP32 Wi-Fi & Broker:** 
+    In your ESP32 Arduino code (`main.cpp`), set the target MQTT server to the public HiveMQ broker instead of the RPi IP:
+    ```cpp
+    const char* ssid     = "YOUR_PHONE_HOTSPOT_SSID";
+    const char* password = "YOUR_PHONE_HOTSPOT_PASSWORD";
+    const char* mqtt_server = "broker.hivemq.com"; // Connect directly to public broker
+    ```
+4.  **Run the Pipeline on Laptop:** 
+    Open a terminal on your laptop, navigate to `backend/rpi-edge`, activate the venv, and run:
+    ```powershell
+    python main.py
+    ```
+5.  **Run the Dashboard on Laptop:**
+    Open a second terminal, navigate to `frontend/dashboard`, and run:
+    ```powershell
+    npm run dev
+    ```
+6.  **Verify End-to-End Loop:**
+    *   The Python pipeline on your laptop captures the camera feed (webcam or video) and publishes telemetry to `broker.hivemq.com:8000` via WebSockets.
+    *   The React Dashboard on your laptop connects to the same public broker and draws the dials and charts.
+    *   The ESP32 connects to your phone's hotspot, reads the `GATE_OPEN/HALF/CLOSE` commands from the public broker, and moves the physical gate.
+
+---
+
+## 🎥 Section 5: Webcam vs. Built-in Laptop Camera for Presentation
+
+### **Is your laptop's built-in webcam OK?**
+*   **Yes, for development and testing:** Your laptop's built-in webcam is perfectly fine for writing code, verifying detections, and calibrating thresholds.
+*   **No, for the final presentation (Visual Constraint):** 
+    During the live demonstration in front of the evaluators, you need the **laptop screen facing the audience/professors** so they can watch the React dashboard update in real-time. If you use your laptop's built-in webcam:
+    *   The camera will be pointed at *you* (the presenter) or the ceiling behind the evaluators.
+    *   If you try to turn the laptop around to capture your teammates walking or to show a simulated crowd, **the evaluators won't be able to see the dashboard screen.**
+    *   **The Solution:** Using an external **USB Webcam** plugged into your laptop allows you to point the camera at the floor, a doorway, or a mock setup, while keeping your laptop screen oriented toward the audience.
+
