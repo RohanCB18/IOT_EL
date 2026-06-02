@@ -1,11 +1,11 @@
 camera:
-  source: "../test/test_videos/crowd5.mp4"                    # 0 = webcam, or "test_videos/crowd.mp4"
+  source: "../test/test_videos/crowd3.mp4"
   resolution: [640, 480]
 
 detection:
   model_path: "yolov8s.pt"
-  confidence: 0.15
-  imgsz: 960
+  confidence: 0.35
+  imgsz: 640
 
 density:
   eps: 50
@@ -14,7 +14,7 @@ density:
   sigma: 30
 
 risk:
-  weights: [0.40, 0.20, 0.25, 0.15]   # density, speed, compression, chaos
+  weights: [0.40, 0.20, 0.25, 0.15]
   warning_threshold: 0.55
   critical_threshold: 0.75
   window_size: 10
