@@ -1,0 +1,30 @@
+camera:
+  source: "../test/test_videos/crowd4.mp4"
+  resolution: [540, 960]
+
+detection:
+  model_path: "yolov8s.pt"  # Use standard YOLOv8s for full-body view
+  confidence: 0.15         # Tuned lower to capture occluded bodies
+  imgsz: 960               # High resolution to capture small, distant bodies
+
+density:
+  eps: 50
+  min_samples: 3
+  pixels_per_meter: 180    # Calibrated to place density at caution/warning levels
+  sigma: 30
+
+risk:
+  weights: [0.45, 0.15, 0.25, 0.15]
+  warning_threshold: 0.25   # Warning starts at 0.25
+  critical_threshold: 0.60  # Critical starts at 0.60 (keeping the gate at HALF for this crowd)
+  window_size: 10
+
+mqtt:
+  broker: "broker.hivemq.com"
+  port: 8000
+  topics:
+    metrics: "oracle_rohan_123/node1/metrics"
+    heatmap: "oracle_rohan_123/node1/heatmap"
+    actuation: "oracle_rohan_123/node1/actuation"
+    alert: "oracle_rohan_123/node1/alert"
+    camera: "oracle_rohan_123/node1/camera"
