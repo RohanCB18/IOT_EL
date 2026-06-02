@@ -1,11 +1,11 @@
 camera:
   source: "../test/test_videos/crowd2.mp4"
-  resolution: [640, 480]
+  resolution: [540, 960]
 
 detection:
   model_path: "yolov8n-head.pt"  # Custom head-detection model to track highly occluded crowds
-  confidence: 0.08
-  imgsz: 960
+  confidence: 0.05
+  imgsz: 1280
 
 density:
   eps: 50
@@ -15,8 +15,8 @@ density:
 
 risk:
   weights: [0.40, 0.20, 0.25, 0.15]
-  warning_threshold: 0.3
-  critical_threshold: 0.75
+  warning_threshold: 0.25
+  critical_threshold: 0.55
   window_size: 10
 
 mqtt:

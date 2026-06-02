@@ -48,7 +48,7 @@ def _annotate_hud(frame, count: int, density: float, level: str,
     """Writes a clean, modern HUD overlay with a semi-transparent background."""
     lines = [
         f"People: {count}",
-        f"Density: {density:.2f} p/m² [{level}]",
+        f"Density: {density:.2f} p/m^2 [{level}]",
         f"Risk: {risk_score:.3f} [{alert_level}]",
         f"Gate: {gate_command}",
         f"Trend: {trend_slope:+.4f} R/s",
