@@ -135,12 +135,6 @@ class OpticalFlowAnalyser:
         """
         vis = cv2.addWeighted(frame, 1 - alpha, flow_bgr, alpha, 0)
 
-        y = 90
-        for key, val in metrics.items():
-            cv2.putText(vis, f"{key}: {val:.3f}", (10, y),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 50), 1)
-            y += 22
-
         return vis
 
 

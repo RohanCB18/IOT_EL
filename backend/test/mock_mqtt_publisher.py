@@ -9,21 +9,24 @@ import paho.mqtt.client as mqtt
 
 # MQTT Setup
 BROKER = "broker.hivemq.com"
-PORT = 1883
+PORT = 8000
 TOPIC_METRICS = "oracle_rohan_123/node1/metrics"
 TOPIC_HEATMAP = "oracle_rohan_123/node1/heatmap"
 TOPIC_ACTUATION = "oracle_rohan_123/node1/actuation"
 TOPIC_ALERT = "oracle_rohan_123/node1/alert"
 TOPIC_CAMERA = "oracle_rohan_123/node1/camera"
 
-client = mqtt.Client(client_id="mock-publisher")
+transport = "websockets" if PORT == 8000 else "tcp"
+client = mqtt.Client(client_id="mock-publisher", transport=transport)
+if transport == "websockets":
+    client.ws_set_options(path="/mqtt")
 
 def main():
-    print(f"[MOCK] Connecting to MQTT Broker at {BROKER}:{PORT}...")
+    print(f"[MOCK] Connecting to MQTT Broker at {BROKER}:{PORT} via {transport}...")
     try:
         client.connect(BROKER, PORT, 60)
     except Exception as e:
-        print(f"[ERROR] Could not connect: {e}. Is Mosquitto running on port 1883?")
+        print(f"[ERROR] Could not connect: {e}. Is the network blocked or port unavailable?")
         return
 
     client.loop_start()

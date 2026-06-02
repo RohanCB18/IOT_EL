@@ -44,26 +44,34 @@ def _open_capture(source):
 
 def _annotate_hud(frame, count: int, density: float, level: str,
                   risk_score: float, alert_level: str, gate_command: str,
-                  trend_slope: float, ttc):
-    """Writes a HUD overlay on the frame (top-left block)."""
+                  trend_slope: float, ttc, flow_mag: float, divergence: float, chaos: float):
+    """Writes a clean, modern HUD overlay with a semi-transparent background."""
     lines = [
         f"People: {count}",
-        f"Density: {density:.2f} p/m²  [{level}]",
-        f"Risk: {risk_score:.3f}  [{alert_level}]",
+        f"Density: {density:.2f} p/m² [{level}]",
+        f"Risk: {risk_score:.3f} [{alert_level}]",
         f"Gate: {gate_command}",
         f"Trend: {trend_slope:+.4f} R/s",
         f"TTC: {f'{ttc:.1f}s' if ttc is not None else 'N/A'}",
+        f"Flow Speed: {flow_mag:.2f} px/f",
+        f"Divergence: {divergence:+.4f}",
+        f"Chaos: {chaos:.3f} rad",
     ]
     colours = {
-        "SAFE":     (0, 220, 0),
-        "WARNING":  (0, 180, 255),
-        "CRITICAL": (0, 0, 255),
+        "SAFE":     (128, 222, 74),   # BGR green
+        "WARNING":  (36, 191, 251),   # BGR amber
+        "CRITICAL": (68, 68, 239),    # BGR red
     }
     colour = colours.get(alert_level, (255, 255, 255))
 
+    # Draw semi-transparent dark slate-900 background box
+    overlay_box = frame.copy()
+    cv2.rectangle(overlay_box, (5, 5), (210, 180), (42, 23, 15), -1)
+    cv2.addWeighted(overlay_box, 0.7, frame, 0.3, 0, frame)
+
     for i, line in enumerate(lines):
-        cv2.putText(frame, line, (10, 30 + i * 24),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, colour, 2, cv2.LINE_AA)
+        cv2.putText(frame, line, (12, 22 + i * 17),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, colour, 1, cv2.LINE_AA)
     return frame
 
 
@@ -93,6 +101,9 @@ def run(config_path: str = "config.yaml", show_display: bool = True):
     cap = _open_capture(source)
     print(f"[INFO] Pipeline running. Source={source}  Press 'q' to quit.")
 
+    if show_display:
+        cv2.namedWindow("Oracle - Crowd Safety Pipeline", cv2.WINDOW_NORMAL)
+
     frame_idx = 0
     try:
         while True:
@@ -100,6 +111,11 @@ def run(config_path: str = "config.yaml", show_display: bool = True):
             if not ret:
                 print("[INFO] End of stream or read error.")
                 break
+
+            # Resize frame to configured resolution for high performance and proper window sizing
+            res = cfg["camera"].get("resolution")
+            if res and isinstance(res, list) and len(res) == 2:
+                frame = cv2.resize(frame, (res[0], res[1]))
 
             # ---- Phase 1: Detection ----------------------------------------
             centroids, boxes = detector.detect(frame)
@@ -145,7 +161,7 @@ def run(config_path: str = "config.yaml", show_display: bool = True):
             vis = flow_analyser.overlay(vis, flow_bgr, flow_metrics, alpha=0.25)
             vis = _annotate_hud(vis, len(centroids), density, los_level,
                                 risk_score, alert_level, gate_command,
-                                trend_slope, ttc)
+                                trend_slope, ttc, flow_mag, divergence, chaos)
 
             # ---- Phase 3B: MQTT publishing ----------------------------------
             if mqtt_pub.connected:
@@ -170,7 +186,7 @@ def run(config_path: str = "config.yaml", show_display: bool = True):
 
             # ---- Display (optional) ----------------------------------------
             if show_display:
-                cv2.imshow("Oracle — Crowd Safety Pipeline", vis)
+                cv2.imshow("Oracle - Crowd Safety Pipeline", vis)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     print("[INFO] Quit requested.")
                     break

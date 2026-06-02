@@ -1,11 +1,11 @@
 camera:
-  source: 0                    # 0 = webcam, or "test_videos/crowd.mp4"
-  resolution: [320, 240]
+  source: "../test/test_videos/crowd3.mp4"                    # 0 = webcam, or "test_videos/crowd.mp4"
+  resolution: [640, 480]
 
 detection:
-  model_path: "yolov8n.pt"
-  confidence: 0.45
-  imgsz: 320
+  model_path: "yolov8s.pt"
+  confidence: 0.15
+  imgsz: 960
 
 density:
   eps: 50
@@ -21,7 +21,7 @@ risk:
 
 mqtt:
   broker: "broker.hivemq.com"
-  port: 1883
+  port: 8000
   topics:
     metrics: "oracle_rohan_123/node1/metrics"
     heatmap: "oracle_rohan_123/node1/heatmap"

@@ -95,11 +95,6 @@ class DensityMapper:
             cv2.putText(vis, tag, (int(cx) + 5, int(cy) - 5),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.4, colour, 1)
 
-        # Density + LoS banner (top-left)
-        banner_colour = self._level_colour(level)
-        cv2.putText(vis, f"Density: {density:.2f} p/m²  [{level}]",
-                    (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.65, banner_colour, 2)
-
         return vis
 
     # ------------------------------------------------------------------

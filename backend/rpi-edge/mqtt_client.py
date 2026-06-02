@@ -25,7 +25,10 @@ class MQTTPublisher:
         self.port    = cfg["port"]
         self.topics  = cfg["topics"]
 
-        self._client = mqtt.Client(client_id="oracle-pipeline", protocol=mqtt.MQTTv311)
+        transport = "websockets" if self.port == 8000 else "tcp"
+        self._client = mqtt.Client(client_id="oracle-pipeline", protocol=mqtt.MQTTv311, transport=transport)
+        if transport == "websockets":
+            self._client.ws_set_options(path="/mqtt")
         self._client.on_connect    = self._on_connect
         self._client.on_disconnect = self._on_disconnect
         self._client.on_publish    = self._on_publish
