@@ -1,5 +1,5 @@
 camera:
-  source: "../test/test_videos/crowd4.mp4"
+  source: "../test/test_videos/crowd.mp4"
   resolution: [540, 960]
 
 detection:

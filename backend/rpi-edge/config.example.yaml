@@ -1,9 +1,22 @@
 camera:
   source: 0                    # 0 = webcam, or "test_videos/crowd.mp4"
-  resolution: [320, 240]
+  resolution: [640, 480]       # set to [320, 240] for RPi CPU-only mode
 
 detection:
-  model_path: "models/yolov8n_ncnn_model"
+  # ── Backend selector ──────────────────────────────────────────────────────
+  # "peoplenet" → NVIDIA PeopleNet ONNX (default, recommended)
+  #               Requires: pip install onnxruntime-gpu  (CUDA 12.x + cuDNN 9.x)
+  #               For CPU-only: pip install onnxruntime  (no -gpu suffix)
+  # "yolo"      → YOLOv8 via ultralytics (fallback, works out of the box)
+  backend: "peoplenet"
+
+  # ── PeopleNet settings (active when backend = "peoplenet") ───────────────
+  peoplenet_model_path: "models/resnet34_peoplenet.onnx"
+  peoplenet_confidence: 0.40   # min confidence to keep a detection (0–1)
+  peoplenet_nms: 0.50          # NMS IoU threshold (lower = more suppression)
+
+  # ── YOLOv8 settings (active when backend = "yolo") ───────────────────────
+  model_path: "yolov8n_ncnn_model"   # or yolov8s.pt / yolov8n.pt
   confidence: 0.45
   imgsz: 320
 

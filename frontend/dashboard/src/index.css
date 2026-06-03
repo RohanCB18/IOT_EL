@@ -1,18 +1,88 @@
-﻿*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
-  font-family: 'Segoe UI', system-ui, sans-serif;
-  font-size: 14px;
-  color-scheme: dark;
-  background: #020817;
-  color: #e2e8f0;
-  -webkit-font-smoothing: antialiased;
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-body { background: #020817; }
+:root {
+  /* Fonts */
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-heading: 'Outfit', 'Inter', system-ui, sans-serif;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color-scheme: dark;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Theme Colors (Deep space / Cyber dashboard) */
+  --bg-main: #030712;
+  --bg-header: rgba(3, 7, 18, 0.75);
+  --bg-card: rgba(17, 24, 39, 0.55);
+  --bg-card-hover: rgba(31, 41, 55, 0.65);
+  
+  --border-card: rgba(99, 102, 241, 0.12);
+  --border-card-hover: rgba(168, 85, 247, 0.25);
+  --border-glow: rgba(99, 102, 241, 0.25);
+
+  --text-primary: #f3f4f6;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  
+  /* Brand/Accents */
+  --color-primary: #6366f1;     /* Indigo */
+  --color-primary-glow: rgba(99, 102, 241, 0.15);
+  --color-secondary: #a855f7;   /* Purple */
+  --color-secondary-glow: rgba(168, 85, 247, 0.15);
+
+  /* Alert States */
+  --color-safe: #10b981;        /* Emerald */
+  --color-safe-bg: rgba(16, 185, 129, 0.08);
+  --color-safe-glow: rgba(16, 185, 129, 0.25);
+  
+  --color-warning: #f59e0b;     /* Amber */
+  --color-warning-bg: rgba(245, 158, 11, 0.08);
+  --color-warning-glow: rgba(245, 158, 11, 0.25);
+  
+  --color-critical: #ef4444;    /* Rose */
+  --color-critical-bg: rgba(239, 68, 68, 0.08);
+  --color-critical-glow: rgba(239, 68, 68, 0.25);
+
+  /* Shadow details */
+  --shadow-premium: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  --glass-blur: 16px;
+  
+  /* Layout constraints */
+  background: var(--bg-main);
+  color: var(--text-primary);
+  overflow-x: hidden;
+}
+
+body {
+  background: var(--bg-main);
+  color: var(--text-primary);
+  min-height: 100svh;
+}
 
 #root {
   width: 100%;
   max-width: 100%;
   min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Base scrollbar reset */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.15);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.35);
 }

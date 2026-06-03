@@ -1,11 +1,22 @@
 camera:
-  source: "../test/test_videos/crowd5.mp4"                    # 0 = webcam, or "test_videos/crowd.mp4"
+  source: "D:/IOT_EL/backend/test/test_videos/crowd.mp4"  # 0 = webcam, or "test_videos/crowd.mp4"
   resolution: [640, 480]
 
 detection:
+  # ── Backend selector ──────────────────────────────────────────────────────
+  # "peoplenet" → NVIDIA PeopleNet ONNX (default, recommended — faster + more accurate)
+  # "yolo"      → YOLOv8 via ultralytics (fallback — change here to switch)
+  backend: "peoplenet"
+
+  # ── PeopleNet settings (active when backend = "peoplenet") ───────────────
+  peoplenet_model_path: "models/resnet34_peoplenet.onnx"
+  peoplenet_confidence: 0.40   # higher threshold = cleaner results
+  peoplenet_nms: 0.50          # NMS IoU threshold
+
+  # ── YOLOv8 settings (active when backend = "yolo") ───────────────────────
   model_path: "yolov8s.pt"
   confidence: 0.15
-  imgsz: 960
+  imgsz: 640
 
 density:
   eps: 50
@@ -14,10 +25,13 @@ density:
   sigma: 30
 
 risk:
-  weights: [0.40, 0.20, 0.25, 0.15]   # density, speed, compression, chaos
-  warning_threshold: 0.55
-  critical_threshold: 0.75
+  weights: [0.40, 0.20, 0.25, 0.15] # density, speed, compression, chaos
+  warning_threshold: 0.45
+  critical_threshold: 0.65
   window_size: 10
+  smoothing_alpha: 0.2
+  hysteresis_margin: 0.05
+  actuator_cooldown_s: 5.0
 
 mqtt:
   broker: "broker.hivemq.com"

@@ -13,6 +13,7 @@ Pipeline per frame:
 
 import sys
 import time
+# pyrefly: ignore [missing-import]
 import cv2
 import yaml
 import numpy as np
@@ -95,7 +96,7 @@ def _annotate_hud(canvas, count: int, density: float, level: str,
         
         # --- Section 2: Risk Analysis ---
         (None, "[ RISK ANALYSIS ]", (220, 220, 220)),
-        ("Composite Risk:", f"{risk_score:.3f}", theme_colour),
+        ("Smooth Risk:", f"{risk_score:.3f}", theme_colour),
         ("Alert Level:", f"{alert_level}", theme_colour),
         ("Gate Actuator:", f"{gate_command}", theme_colour),
         
@@ -151,6 +152,7 @@ def run(config_path: str = "config.yaml", show_display: bool = True):
 
     # ---- Instantiate pipeline components -----------------------------------
     detector = PersonDetector(config_path)
+    print(f"[INFO] ✓ Detector: {detector.backend_name}  |  Device: {detector.device.upper()}")
     mapper   = DensityMapper(config_path)
     flow_analyser = OpticalFlowAnalyser()
     engine   = RiskEngine(config_path)
@@ -171,13 +173,30 @@ def run(config_path: str = "config.yaml", show_display: bool = True):
         cv2.namedWindow("Oracle - Crowd Safety Pipeline", cv2.WINDOW_NORMAL)
         cv2.setWindowProperty("Oracle - Crowd Safety Pipeline", cv2.WND_PROP_ASPECT_RATIO, cv2.WINDOW_KEEPRATIO)
 
-    frame_idx = 0
+    frame_idx    = 0
+    mqtt_tick    = 0   # counts up; publish MQTT every N frames
+    MQTT_EVERY   = 5   # publish MQTT / encode frames every 5 frames (~6 Hz at 30 FPS)
+    PRINT_EVERY  = 15  # console summary every N frames (reduces stdout stall)
+
+    # ---- FPS tracking (rolling window of last 30 frame durations) -----------
+    from collections import deque
+    _frame_times: deque = deque(maxlen=30)
+    _t_last = time.perf_counter()
+    fps_display = 0.0
+
     try:
         while True:
             ret, frame = cap.read()
             if not ret:
                 print("[INFO] End of stream or read error.")
                 break
+
+            # ---- FPS: measure time since last frame -------------------------
+            _t_now = time.perf_counter()
+            _frame_times.append(_t_now - _t_last)
+            _t_last = _t_now
+            if len(_frame_times) >= 2:
+                fps_display = len(_frame_times) / sum(_frame_times)
 
             # Resize frame to configured resolution for high performance and proper window sizing
             res = cfg["camera"].get("resolution")
@@ -203,24 +222,27 @@ def run(config_path: str = "config.yaml", show_display: bool = True):
                 divergence=divergence,
                 chaos=chaos,
             )
-            risk_score   = result["risk_score"]
+            raw_risk     = result["risk_score"]
+            risk_score   = result["smoothed_risk"] # Use smoothed for GUI and logic
             alert_level  = result["alert_level"]
             gate_command = result["gate_command"]
             trend_slope  = result["trend_slope"]
             ttc          = result["time_to_critical_s"]
             alert_msg    = result["alert_message"]
 
-            # ---- Console summary -------------------------------------------
-            print(
-                f"[{frame_idx:05d}] "
-                f"count={len(centroids):3d}  "
-                f"density={density:.2f}  "
-                f"R={risk_score:.3f}  "
-                f"level={alert_level:8s}  "
-                f"gate={gate_command:10s}  "
-                f"slope={trend_slope:+.4f}  "
-                f"ttc={f'{ttc:.1f}s' if ttc else 'N/A'}"
-            )
+            # ---- Console summary (throttled to avoid stdout stall) ----------
+            if frame_idx % PRINT_EVERY == 0:
+                print(
+                    f"[{frame_idx:05d}] "
+                    f"count={len(centroids):3d}  "
+                    f"density={density:.2f}  "
+                    f"R(raw)={raw_risk:.3f}  "
+                    f"R(sm)={risk_score:.3f}  "
+                    f"level={alert_level:8s}  "
+                    f"gate={gate_command:10s}  "
+                    f"slope={trend_slope:+.4f}  "
+                    f"ttc={f'{ttc:.1f}s' if ttc else 'N/A'}"
+                )
 
             # Generate the fully annotated visualization frame (bounding boxes, heatmap, flow overlays)
             vis = detector.draw_detections(frame, centroids, boxes)
@@ -236,8 +258,27 @@ def run(config_path: str = "config.yaml", show_display: bool = True):
                                    trend_slope, ttc, flow_mag, divergence, chaos,
                                    dx)
 
-            # ---- Phase 3B: MQTT publishing ----------------------------------
-            if mqtt_pub.connected:
+            # ---- FPS badge — top-right corner of canvas --------------------
+            fps_text  = f"FPS: {fps_display:5.1f}"
+            fps_color = (
+                (74, 222, 128)  if fps_display >= 20 else   # green  — smooth
+                (36, 191, 251)  if fps_display >= 10 else   # amber  — ok
+                (68,  68, 239)                              # red    — lagging
+            )
+            (tw, th), _ = cv2.getTextSize(fps_text, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)
+            badge_x = canvas.shape[1] - tw - 18
+            badge_y = 38
+            # Semi-transparent dark pill behind the text
+            _ov = canvas.copy()
+            cv2.rectangle(_ov, (badge_x - 8, badge_y - th - 6),
+                          (badge_x + tw + 6, badge_y + 4), (20, 20, 20), -1)
+            cv2.addWeighted(_ov, 0.75, canvas, 0.25, 0, canvas)
+            _draw_text_with_shadow(canvas, fps_text, (badge_x, badge_y),
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.55, fps_color, thickness=1)
+
+            # ---- Phase 3B: MQTT publishing (every MQTT_EVERY frames) --------
+            mqtt_tick += 1
+            if mqtt_pub.connected and mqtt_tick % MQTT_EVERY == 0:
                 mqtt_pub.publish_metrics(
                     count=len(centroids),
                     density=density,
@@ -249,11 +290,11 @@ def run(config_path: str = "config.yaml", show_display: bool = True):
                 )
                 heatmap_b64 = encode_frame_base64(heatmap_bgr, quality=50)
                 mqtt_pub.publish_heatmap(heatmap_b64)
-                
-                # Publish the fully annotated live camera feed (using the dashboard canvas)
-                camera_b64 = encode_frame_base64(canvas, quality=55)
+
+                # Publish the annotated camera feed (most expensive encode — throttled)
+                camera_b64 = encode_frame_base64(canvas, quality=50)
                 mqtt_pub.publish_camera(camera_b64)
-                
+
                 mqtt_pub.publish_actuation(gate_command)
                 mqtt_pub.publish_alert(alert_level, alert_msg, ttc)
 

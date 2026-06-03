@@ -1,4 +1,5 @@
 import numpy as np
+# pyrefly: ignore [missing-import]
 import cv2
 
 
@@ -14,21 +15,41 @@ class OpticalFlowAnalyser:
       3. chaos           (σθ)   — angular standard deviation of flow vectors
                                   high → people moving in many different directions (panic-like)
                                   low  → orderly, uniform movement
+
+    Performance notes
+    -----------------
+    • `downsample_res`: Farneback cost scales as O(W×H). Running at 320×240 instead
+      of 640×480 gives 4× speedup with negligible metric accuracy loss.
+    • `frame_skip`: Only compute flow every N frames; return cached metrics otherwise.
+      N=2 halves the optical-flow budget at the cost of 1-frame metric lag.
     """
 
-    # Farneback parameters (tuned for 320×240 at 3–10 FPS)
+    # Farneback parameters — tuned for downsampled 320×240 resolution
     FB_PARAMS = dict(
         pyr_scale  = 0.5,   # each pyramid level shrinks by half
-        levels     = 3,     # number of pyramid levels
-        winsize    = 15,    # averaging window — larger = smoother but less detail
-        iterations = 3,     # iterations per pyramid level
+        levels     = 2,     # reduced from 3 — sufficient at 320×240
+        winsize    = 13,    # slightly smaller window at lower res
+        iterations = 2,     # reduced from 3 — still stable at 320×240
         poly_n     = 5,     # neighbourhood size for polynomial expansion
-        poly_sigma = 1.2,   # Gaussian std for smoothing before polynomial fit
+        poly_sigma = 1.1,   # Gaussian std for polynomial fit
         flags      = 0,
     )
 
-    def __init__(self):
-        self.prev_gray = None   # stores the previous frame (greyscale)
+    def __init__(self, downsample_res: tuple = (320, 240), frame_skip: int = 2):
+        """
+        Parameters
+        ----------
+        downsample_res : (width, height) to run optical flow at.
+                         Default (320, 240) = 4× fewer pixels than 640×480.
+        frame_skip     : compute flow only every N frames; return cached result
+                         on skipped frames. 1 = every frame, 2 = every other, etc.
+        """
+        self.prev_gray      = None
+        self.downsample_res = downsample_res
+        self.frame_skip     = max(1, frame_skip)
+        self._frame_count   = 0
+        self._cached_metrics = self._zero_metrics()
+        self._cached_flow_bgr = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -52,16 +73,26 @@ class OpticalFlowAnalyser:
         flow_xy  : tuple (fx, fy) np.ndarrays — raw flow components, or (None, None)
                    on the first frame (no previous frame to compare against)
         """
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        self._frame_count += 1
+
+        # ---- Downsample to reduce Farneback cost by 4x ------------------
+        small = cv2.resize(frame, self.downsample_res, interpolation=cv2.INTER_AREA)
+        gray  = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+
+        # ---- Frame-skip: return cached result on non-compute frames ------
+        if self._frame_count % self.frame_skip != 0:
+            blank = self._cached_flow_bgr if self._cached_flow_bgr is not None \
+                    else np.zeros((*frame.shape[:2], 3), dtype=np.uint8)
+            return self._cached_metrics, blank, (None, None)
 
         # First frame — no flow yet
         if self.prev_gray is None:
             self.prev_gray = gray
-            blank = np.zeros_like(frame)
+            blank = np.zeros((*frame.shape[:2], 3), dtype=np.uint8)
+            self._cached_flow_bgr = blank
             return self._zero_metrics(), blank, (None, None)
 
-        # ---- Farneback dense optical flow --------------------------------
-        # Returns a 2-channel array: flow[y, x, 0]=fx, flow[y, x, 1]=fy
+        # ---- Farneback dense optical flow (on downsampled frame) ---------
         flow = cv2.calcOpticalFlowFarneback(
             self.prev_gray, gray, None, **self.FB_PARAMS
         )
@@ -74,15 +105,14 @@ class OpticalFlowAnalyser:
         magnitude = np.sqrt(fx ** 2 + fy ** 2)
         flow_magnitude = float(np.mean(magnitude))
 
-        # ---- Metric 2: Divergence  ∇·v = ∂fx/∂x + ∂fy/∂y ---------------
-        # np.gradient returns the discrete derivative along each axis
-        dfx_dx = np.gradient(fx, axis=1)   # ∂fx/∂x
-        dfy_dy = np.gradient(fy, axis=0)   # ∂fy/∂y
-        div_field = dfx_dx + dfy_dy
-        divergence = float(np.mean(div_field))
+        # ---- Metric 2: Divergence  ∇·v ≈ ∂fx/∂x + ∂fy/∂y ---------------
+        # Fast finite-difference approximation — avoids the full np.gradient
+        # which allocates two large temporary arrays at full resolution.
+        dfx_dx = fx[:, 1:] - fx[:, :-1]    # shape (H, W-1)
+        dfy_dy = fy[1:, :] - fy[:-1, :]    # shape (H-1, W)
+        divergence = float(np.mean(dfx_dx)) + float(np.mean(dfy_dy))
 
         # ---- Metric 3: Chaos — angular std dev ---------------------------
-        # arctan2 gives the angle of each flow vector (−π … +π)
         angles = np.arctan2(fy, fx)
         chaos  = float(np.std(angles))
 
@@ -92,14 +122,23 @@ class OpticalFlowAnalyser:
             "chaos":          chaos,
         }
 
-        # ---- Visualisation -----------------------------------------------
+        # ---- Visualisation (upscale back to original frame size) ---------
         flow_bgr = self._flow_to_bgr(magnitude, angles)
+        flow_bgr = cv2.resize(flow_bgr, (frame.shape[1], frame.shape[0]),
+                              interpolation=cv2.INTER_LINEAR)
+
+        # Cache for frame-skip frames
+        self._cached_metrics  = metrics
+        self._cached_flow_bgr = flow_bgr
 
         return metrics, flow_bgr, (fx, fy)
 
     def reset(self):
         """Call this if the video source changes (e.g. camera reconnect)."""
-        self.prev_gray = None
+        self.prev_gray       = None
+        self._frame_count    = 0
+        self._cached_metrics = self._zero_metrics()
+        self._cached_flow_bgr = None
 
     # ------------------------------------------------------------------
     # Internal helpers
