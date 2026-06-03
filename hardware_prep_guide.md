@@ -1,230 +1,202 @@
-# 🏟️ Intelligent Crowd Flow & Density Safety Oracle — Deployment & Presentation Guide
+# 🏟️ Intelligent Crowd Flow & Density Safety Oracle — Laptop + ESP32 Deployment Guide
 
-This guide is designed to prepare you and your team for the laboratory phase and final presentation. It provides two completely independent, step-by-step methods to deploy and demonstrate the project:
-
-*   **METHOD A (Primary):** Full IoT Deployment using **Raspberry Pi + USB Webcam + ESP32 Actuator**.
-*   **METHOD B (Alternative):** Streamlined Fallback Deployment using **Laptop (Built-in Webcam/Video) + ESP32 Actuator**.
+This guide describes how to set up, wire, configure, and demonstrate the **Intelligent Crowd Flow & Density Safety Oracle** using a **Laptop** (as the Edge processing node) and an **ESP32** (as the physical actuator gate node).
 
 ---
 
-## 🛠️ Section 1: Complete Hardware Components List
+## 🗺️ System Architecture
 
-Ensure you have gathered the following components before heading to the lab:
+The setup operates as a distributed edge-computing IoT network. The laptop handles the heavy computer vision calculations and coordinates the physical gate via a public MQTT broker:
 
-### **Common Actuator Components (The "Gate" Node - Needed for Both Methods)**
-- [ ] **ESP32 DevKit v1** (or any standard NodeMCU ESP32 board).
-- [ ] **SG90 Micro Servo Motor** (Used to physically rotate the "gate").
-- [ ] **Active Buzzer** (3.3V or 5V; sounds automatically when supplied with voltage).
-- [ ] **LEDs (3 pieces):** 1× Green (Safe), 1× Amber (Warning), 1× Red (Critical).
-- [ ] **Resistors:** 3× $220\Omega$ resistors (To protect the LEDs from burning out).
-- [ ] **Solderless Breadboard** & Jumper Wires (~10× M-M, ~5× M-F).
-- [ ] **Physical Gate Cardboard:** A small piece of cardboard/stick taped to the servo horn to visually show the gate rotating.
+```mermaid
+graph LR
+    subgraph Laptop (Edge Node)
+        Webcam[Webcam / Video Input] -->|Raw Frames| PythonPipeline[Python Pipeline<br>YOLOv8 + Optical Flow]
+        PythonPipeline -->|Dashboard Data| ReactDashboard[React Dashboard<br>http://localhost:5173]
+    end
 
-### **Method A Specific Components (Raspberry Pi Setup)**
-- [ ] **Raspberry Pi 4 Model B** (with official 5V 3A USB-C Power Supply).
-- [ ] **USB Webcam** (Standard 720p/1080p camera to plug into the RPi).
-- [ ] **MicroSD Card** (16GB or 32GB, pre-flashed with RPi OS 64-bit Bookworm).
-- [ ] **MicroSD Card Reader** (For laptop).
+    subgraph Cloud Broker
+        PythonPipeline -->|Publish MQTT Metrics / Commands| HiveMQ[Public MQTT Broker<br>broker.hivemq.com:8000]
+    end
 
-### **Method B Specific Components (Laptop-Only Setup)**
-- [ ] **Laptop** (Using its built-in webcam or pre-recorded video).
+    subgraph Physical Gate Node
+        HiveMQ -->|Subscribe to Actuation Command| ESP32[ESP32 DevKit v1]
+        ESP32 -->|Angle Command| Servo[SG90 Servo Gate]
+        ESP32 -->|State LEDs| LEDs[Green/Amber/Red LEDs]
+        ESP32 -->|Siren Trigger| Buzzer[Active Buzzer]
+    end
 
-### **Networking Device (Crucial for Both)**
-- [ ] **Phone Hotspot (WPA2):** Standard lab Wi-Fi networks block device-to-device communication. Set up a personal phone hotspot. All devices (Laptop, ESP32, and RPi if using Method A) must connect to this same hotspot.
+    %% Networking connection style %%
+    Laptop --- |Phone Hotspot Wi-Fi| HiveMQ
+    ESP32 --- |Phone Hotspot Wi-Fi| HiveMQ
+    
+    style Laptop fill:#1e293b,stroke:#334155,color:#fff
+    style Cloud Broker fill:#0f172a,stroke:#334155,color:#fff
+    style Physical Gate Node fill:#180f2a,stroke:#4c1d95,color:#fff
+```
 
 ---
 
-## 🔌 Section 2: Common ESP32 Actuator Circuit Wiring
+## 🛠️ Section 1: Hardware Components List
 
-Regardless of whether you choose Method A or Method B, wire the ESP32 circuit on the breadboard as follows:
+Ensure you have gathered the following components for your lab setup:
+
+### **1. Edge Processing Node (Laptop)**
+* **Laptop**: Windows/Mac/Linux with built-in webcam (or external USB camera) to run the YOLOv8 and Optical Flow models.
+
+### **2. Actuator & Indicators (The "Gate" Node)**
+* **ESP32 DevKit v1** (or any standard NodeMCU ESP32 board).
+* **SG90 Micro Servo Motor** (controls physical gate rotation).
+* **Active Buzzer** (3.3V or 5V; sounds automatically when supplied with voltage).
+* **LED Status Lights (3 pieces)**: 1× Green (Safe), 1× Amber (Warning), 1× Red (Critical).
+* **Resistors**: 3× $220\Omega$ resistors (protects the LEDs from burning out).
+* **Breadboard & Jumper Wires**: Solderless breadboard, ~10× Male-to-Male (M-M), ~5× Male-to-Female (M-F) jumpers.
+* **Micro-USB Cable**: For powering the ESP32 and flashing firmware from your laptop.
+* **Gate Indicator**: A small piece of cardboard or stick taped to the servo horn to visually show the gate opening and closing.
+
+### **3. Networking Device**
+* **Mobile Phone Hotspot (WPA2)**: Standard institutional/lab Wi-Fi networks block device-to-device communication and raw socket ports. Set up a personal phone hotspot. Both your **Laptop** and your **ESP32** must connect to this same hotspot network.
+
+---
+
+## 🔌 Section 2: ESP32 Actuator Circuit Wiring
+
+Wire your components on the breadboard according to the connection map below:
 
 > [!WARNING]
-> **Check Grounding:** Ensure a common ground wire runs from the ESP32 `GND` pin to the breadboard's negative (-) rail. The grounds of the LEDs, buzzer, and servo must all connect to this same rail.
+> **Check Grounding (GND):** Ensure a common ground wire runs from the ESP32 `GND` pin to the negative (-) rail of your breadboard. The grounds (cathodes) of the three LEDs, the negative pin of the buzzer, and the brown wire of the servo must all connect to this same ground rail.
 
-| Component | Pin Type | ESP32 GPIO Pin | Breadboard Connection |
+```
+                  +--------------------------------+
+                  |         ESP32 DevKit           |
+                  |                                |
+                  |  GND  D13  D14  D25  D26  D27  |
+                  +---|----|----|----|----|----|---+
+                      |    |    |    |    |    |
+                      |    |    |    |    |    +---> [ 220Ω Resistor ] ---> (Red LED Anode)
+                      |    |    |    |    +---------> [ 220Ω Resistor ] ---> (Amber LED Anode)
+                      |    |    |    +--------------> [ 220Ω Resistor ] ---> (Green LED Anode)
+                      |    |    +----------------------------------------> (Buzzer + Pin)
+                      |    +---------------------------------------------> (Servo Orange Signal)
+                      v
+             [ Common GND Rail ] <--- (Servo Brown GND, LED Cathodes, Buzzer - Pin)
+```
+
+### **Pin Connection Table**
+
+| Component | Pin / Wire Color | ESP32 Pin | Breadboard / Circuit Connection |
 | :--- | :---: | :---: | :--- |
-| **SG90 Servo** | Signal (Yellow/Orange) | **GPIO 13** | Direct connection |
-| **SG90 Servo** | Power VCC (Red) | **5V / VIN** | Connects to ESP32 5V pin |
-| **SG90 Servo** | Ground (Brown) | **GND** | Connects to Breadboard GND rail |
-| **Green LED** | Anode (+) | **GPIO 25** | $\rightarrow 220\Omega$ resistor $\rightarrow$ LED Anode |
-| **Amber LED** | Anode (+) | **GPIO 26** | $\rightarrow 220\Omega$ resistor $\rightarrow$ LED Anode |
-| **Red LED** | Anode (+) | **GPIO 27** | $\rightarrow 220\Omega$ resistor $\rightarrow$ LED Anode |
-| **Active Buzzer** | Positive (+) | **GPIO 14** | Direct connection |
-| **Common Rail** | Ground | **GND** | Connects all LED cathodes (-), buzzer negative (-), and servo ground |
+| **SG90 Servo** | Signal (Yellow/Orange) | **GPIO 13** | Connect directly to ESP32 pin. |
+| **SG90 Servo** | Power VCC (Red) | **5V / VIN** | Connect directly to ESP32 5V (or VIN) pin. |
+| **SG90 Servo** | Ground (Brown) | **GND** | Connects to the negative (-) common ground rail. |
+| **Green LED** | Long Leg Anode (+) | **GPIO 25** | Connects to ESP32 via a $220\Omega$ resistor. |
+| **Amber LED** | Long Leg Anode (+) | **GPIO 26** | Connects to ESP32 via a $220\Omega$ resistor. |
+| **Red LED** | Long Leg Anode (+) | **GPIO 27** | Connects to ESP32 via a $220\Omega$ resistor. |
+| **Active Buzzer** | Positive (+) / Long Leg | **GPIO 14** | Connect directly to ESP32 pin. |
+| **LEDs / Buzzer** | Cathodes (-) / Short Legs | **GND** | All connect to the negative (-) common ground rail. |
 
 ---
 
-## 🗼 METHOD A: Full Deployment (Raspberry Pi + USB Webcam + ESP32)
+## 🚀 Section 3: Step-by-Step Deployment Steps
 
-Use this method to demonstrate the full edge-computing pipeline running on the Raspberry Pi, publishing to a local RPi broker, and sending commands to the ESP32 and Laptop dashboard.
+Follow these steps to deploy and test the entire system in the lab:
 
-```
-USB Webcam ──> Raspberry Pi 4 (Edge Pipeline & Local Broker)
-                     |
-                     +───(Local WiFi)───> ESP32 Actuator Node
-                     |
-                     +───(Local WiFi)───> Laptop (React Dashboard Console)
-```
-
-### **Step 1: Set Up & Boot the Raspberry Pi**
-1. Flash the SD card using **Raspberry Pi Imager** on your laptop with **Raspberry Pi OS (64-bit)** (Bookworm). Click the gear icon to pre-configure:
-   * Hostname (e.g. `oracle-pi.local`).
-   * Enable SSH.
-   * Pre-enter your phone's hotspot SSID and password.
-2. Insert the SD card into the RPi, plug in the USB Webcam, connect the power, and wait 2 minutes.
-3. On your laptop, open a terminal and SSH into the RPi:
-   ```bash
-   ssh pi@oracle-pi.local
-   # or ssh pi@<RPi_IP> (check your phone hotspot's client list for the Pi's IP)
-   ```
-4. Install system packages and start the Mosquitto MQTT broker on the Pi:
-   ```bash
-   sudo apt update && sudo apt upgrade -y
-   sudo apt install python3-venv python3-pip python3-opencv mosquitto mosquitto-clients -y
-   ```
-5. Edit the Mosquitto config on the RPi to allow remote connections and WebSockets:
-   ```bash
-   sudo nano /etc/mosquitto/conf.d/local.conf
-   ```
-   Add these lines:
-   ```text
-   listener 1883
-   allow_anonymous true
-   listener 9001
-   protocol websockets
-   ```
-   Restart and enable the service:
-   ```bash
-   sudo systemctl restart mosquitto
-   sudo systemctl enable mosquitto
-   ```
-
-### **Step 2: Deploy & Configure Python Pipeline on RPi**
-1. On your laptop, copy the pipeline folder to the RPi:
-   ```bash
-   scp -r backend/rpi-edge/ pi@oracle-pi.local:~/rpi-edge/
-   ```
-2. On the RPi, set up a virtual environment and install packages:
-   ```bash
-   cd ~/rpi-edge
-   python3 -m venv venv
-   source venv/bin/activate
-   pip install ultralytics scikit-learn numpy scipy paho-mqtt pyyaml
-   ```
-3. Open `config.yaml` on the RPi:
-   ```bash
-   nano config.yaml
-   ```
-   * Set `camera.source: 0` (selects the plugged-in USB webcam).
-   * Set `mqtt.broker: "127.0.0.1"` (uses the broker running locally on the Pi).
-   * Set `mqtt.port: 1883`.
-
-### **Step 3: Update & Flash the ESP32 Actuator**
-1. Open [main.cpp](file:///c:/Users/rohan/OneDrive/Desktop/cursorOP/IOT_EL/backend/esp32-actuator/src/main.cpp) in Arduino IDE or PlatformIO on your laptop.
-2. Update the configuration to connect to your phone hotspot and the **Raspberry Pi's IP address**:
-   ```cpp
-   const char* ssid     = "YOUR_PHONE_HOTSPOT_SSID";
-   const char* password = "YOUR_PHONE_HOTSPOT_PASSWORD";
-   const char* mqtt_server = "<YOUR_RPI_IP_ADDRESS>"; // Set to the RPi's IP address
-   const int mqtt_port     = 1883; // Standard TCP Port
-   ```
-3. Flash the code to the ESP32. Open the Serial Monitor at `115200` to verify it connects to the RPi broker.
-
-### **Step 4: Launch the Laptop Dashboard**
-1. In [useMqtt.js](file:///c:/Users/rohan/OneDrive/Desktop/cursorOP/IOT_EL/frontend/dashboard/src/hooks/useMqtt.js) on your laptop, configure the WebSocket URL to point to the **Raspberry Pi's IP address**:
-   ```javascript
-   const BROKER_URL = 'ws://<YOUR_RPI_IP_ADDRESS>:9001/mqtt';
-   ```
-2. Run the dashboard server:
-   ```bash
-   cd frontend/dashboard
-   npm run dev
-   ```
-   Open `http://localhost:5173` in your browser. Verify it displays "MQTT Connected".
-
-### **Step 5: Run the Pipeline on the RPi**
-1. In your SSH session on the RPi, run the script:
-   ```bash
-   python main.py
-   ```
-2. **Demonstrate:** Stand in front of the USB webcam. Watch the dashboard update live on your laptop and the physical servo gate rotate on your breadboard circuit!
+### **Step 1: Network Setup**
+1. Turn on the **Mobile Hotspot** on your phone (ensure WPA2 security is active).
+2. Connect your **Laptop** to the phone's hotspot.
+3. Keep the SSID and password handy, as you will write them into the ESP32 code.
 
 ---
 
-## 💻 METHOD B: Fallback Deployment (Laptop + Built-in Webcam/Video + ESP32)
-
-Use this method if the Raspberry Pi runs into setup issues. Your laptop serves as the Edge computer, and communication goes over the internet using a public broker.
-
-```
-               Laptop (Runs Pipeline, webcam/video, & Dashboard)
-                                     |
-                               (Phone Hotspot)
-                                     v
-                 Public MQTT Broker (broker.hivemq.com:8000)
-                                     ^
-                               (Phone Hotspot)
-                                     |
-                            ESP32 Actuator Node
-```
-
-### **Step 1: Update & Flash the ESP32 Actuator**
-1. Open [main.cpp](file:///c:/Users/rohan/OneDrive/Desktop/cursorOP/IOT_EL/backend/esp32-actuator/src/main.cpp) in Arduino IDE or PlatformIO on your laptop.
-2. Update the configuration to connect to your phone's hotspot and the **public HiveMQ broker**:
+### **Step 2: Flash the ESP32 Firmware**
+1. Open the [esp32-actuator](file:///c:/Users/rohan/OneDrive/Desktop/cursorOP/IOT_EL/backend/esp32-actuator) project in PlatformIO (VS Code) or open [main.cpp](file:///c:/Users/rohan/OneDrive/Desktop/cursorOP/IOT_EL/backend/esp32-actuator/src/main.cpp) in the Arduino IDE.
+2. Edit lines 9 and 10 to input your phone's hotspot credentials:
    ```cpp
    const char* ssid     = "YOUR_PHONE_HOTSPOT_SSID";
    const char* password = "YOUR_PHONE_HOTSPOT_PASSWORD";
-   const char* mqtt_server = "broker.hivemq.com"; // Connect directly to public broker
    ```
-3. Flash the code to the ESP32. Open the Serial Monitor to verify it connects to HiveMQ.
+3. Ensure the MQTT configuration points to the public HiveMQ broker:
+   ```cpp
+   const char* mqtt_server = "broker.hivemq.com";
+   const int mqtt_port     = 1883; // Standard TCP port
+   const char* mqtt_topic  = "oracle_rohan_123/node1/actuation"; // Unique topic matching python config
+   ```
+4. Connect the ESP32 to your laptop using a micro-USB cable.
+5. Compile and **Upload** the sketch.
+6. Open the Serial Monitor (Baud rate: `115200`). Verify that the ESP32 successfully connects to the Wi-Fi hotspot and prints:
+   `[WIFI] Connected successfully!` and `[MQTT] Connecting to broker... Connected!`
 
-### **Step 2: Launch the Laptop Dashboard**
-1. In [useMqtt.js](file:///c:/Users/rohan/OneDrive/Desktop/cursorOP/IOT_EL/frontend/dashboard/src/hooks/useMqtt.js) on your laptop, ensure the broker URL points to HiveMQ:
-   ```javascript
-   const BROKER_URL = 'ws://broker.hivemq.com:8000/mqtt';
-   ```
-2. Run the dashboard server:
+---
+
+### **Step 3: Run the Laptop Python Pipeline**
+1. Open a terminal on your laptop and navigate to the edge processing folder:
    ```bash
-   cd frontend/dashboard
-   npm run dev
+   cd backend/rpi-edge
    ```
-   Open `http://localhost:5173` in your browser. Verify it displays "MQTT Connected".
-
-### **Step 3: Configure and Run the Python Pipeline on your Laptop**
-1. Open **[config.yaml](file:///c:/Users/rohan/OneDrive/Desktop/cursorOP/IOT_EL/backend/rpi-edge/config.yaml)** on your laptop.
-2. Set the MQTT section to connect to the public broker on port 8000 (WebSockets):
-   ```yaml
-   mqtt:
-     broker: "broker.hivemq.com"
-     port: 8000
-   ```
-3. Set your camera source:
-   * **Webcam:** Set `camera.source: 0` (uses your laptop's built-in webcam).
-   * **Video:** Set `camera.source: "../test/test_videos/crowd2.mp4"` (uses the crowd test video).
-4. Open a terminal on your laptop, navigate to `backend/rpi-edge`, activate the venv, and run:
+2. Activate your virtual environment:
    ```powershell
-   python main.py
+   .\venv\Scripts\activate
    ```
-5. **Demonstrate:** Walk in front of the laptop screen (or play the video) and watch the ESP32 servo gate and LEDs respond live on the table!
+3. Run the pipeline configuration that matches the demonstration you want to present:
+
+   * **Demo 1: Safe / Open Gate Demo (Landscape webcam/video)**
+     ```powershell
+     python main.py --config config_demo1_open.yaml
+     ```
+     *(The gate remains OPEN at $0^{\circ}$. Green LED is active).*
+
+   * **Demo 2: Critical / Closed Gate Demo (Portrait dense video)**
+     ```powershell
+     python main.py --config config_demo2_closed.yaml
+     ```
+     *(The gate CLOSES immediately to $180^{\circ}$. Red LED is active and Buzzer sounds).*
+
+   * **Demo 3: Warning / Half-Open Gate Demo (Portrait medium video)**
+     ```powershell
+     python main.py --config config_demo3_half.yaml
+     ```
+     *(The gate stays half-open at $90^{\circ}$. Amber LED is active).*
 
 ---
 
-## 🎤 Section 4: Final Presentation & Demonstration Layouts
-
-Choose the demonstration setup that matches the method you deploy:
-
-### **Layout 1: RPi + USB Webcam (Method A Demo)**
-*   **Setup:** Mount the USB webcam on a tripod or stand looking at the demo room. Mount the ESP32 servo gate next to it.
-*   **Presentation:** Keep the laptop facing the evaluators showing the React dashboard. Evaluators can watch the crowd walking in the room, watch the RPi process it, and watch the physical gate close next to the camera.
-
----
-
-### **Layout 2: Laptop Built-in Webcam (Method B Demo)**
-*   **Setup:** Place the laptop facing the evaluators. Place the ESP32 circuit on the table right next to the keyboard.
-*   **Crowd:** Teammates stand and move in the background of the room behind the presenter.
-*   **Presentation:** The presenter stands to the side of the laptop. The camera captures the teammates' movements in the background, updating the dashboard on the laptop and triggering the servo gate on the table.
+### **Step 4: Launch the React Dashboard Console**
+1. Open a second terminal window on your laptop.
+2. Navigate to the dashboard directory:
+   ```bash
+   cd frontend/dashboard
+   ```
+3. Start the local development server:
+   ```bash
+   npm run dev
+   ```
+4. Open your browser and navigate to `http://localhost:5173`.
+5. Verify that the dashboard status shows **MQTT Connected** (it subscribes to `ws://broker.hivemq.com:8000/mqtt` to pull metrics and live frames).
 
 ---
 
-### **Layout 3: Pre-recorded Video (Method B Demo - Space Saving)**
-*   **Setup:** Run Method B using the `crowd2.mp4` video. Place the ESP32 circuit next to the laptop on the table.
-*   **Presentation:** The dashboard plays the crowd video, displaying bounding boxes and density heatmaps. The physical servo gate rotates, the amber/red LEDs turn on, and the buzzer sounds in perfect sync with the crowd density peaks in the video. This requires zero physical setup space and is 100% reliable!
+## 🎤 Section 4: Live Presentation Layouts
+
+Use these three layouts to present the project to evaluators:
+
+### **Layout 1: Live Webcam (Interactive Demo)**
+* **Setup**: Place the laptop on the table facing the evaluators. Place the ESP32 breadboard circuit directly next to the keyboard. Run **Demo 1** with your laptop webcam (`camera.source: 0`).
+* **Visual Presentation**: 
+  * The evaluators will see a clean portrait video window with the sidebar HUD on the left showing 1–2 people detected (you and your teammates). The physical gate remains open with the green LED on.
+  * **The Interaction**: Gather 3–4 teammates and crowd closely in front of the laptop camera while waving your hands. Evaluators will watch the live density and risk scores rise on the screen, triggering the amber LED and rotating the physical servo gate to $90^{\circ}$ or $180^{\circ}$ in real-time.
+
+---
+
+### **Layout 2: High-Density Crowd Video (Safety System Demo)**
+* **Setup**: Run **Demo 2** (`config_demo2_closed.yaml`).
+* **Visual Presentation**: 
+  * The screen displays the high-density crowd video (`crowd2.mp4`). The YOLO model tracks and counts **292 heads** in the frame.
+  * The density jumps to $\approx 8\text{ p/m}^2$ (Level of Service: **CRITICAL**).
+  * Evaluators will see the risk score cross the safety threshold, instantly turning on the red LED, triggering the physical buzzer alarm, and rotating the servo gate to the fully closed position ($180^{\circ}$) to prevent further entry.
+
+---
+
+### **Layout 3: Warning/Flow Control Video (Rate Limitation Demo)**
+* **Setup**: Run **Demo 3** (`config_demo3_half.yaml`).
+* **Visual Presentation**: 
+  * The screen displays the medium-density crowd video (`crowd4.mp4`). The model tracks bodies, calculating a steady warning risk score of $\approx 0.40$.
+  * Evaluators will see the yellow/amber LED activate and the physical servo gate rotate and hold at $90^{\circ}$ (half-open) to demonstrate automated flow rate restriction.
