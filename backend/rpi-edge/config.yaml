@@ -35,7 +35,7 @@ risk:
 
 mqtt:
   broker: "broker.hivemq.com"
-  port: 8000
+  port: 1883
   topics:
     metrics: "oracle_rohan_123/node1/metrics"
     heatmap: "oracle_rohan_123/node1/heatmap"

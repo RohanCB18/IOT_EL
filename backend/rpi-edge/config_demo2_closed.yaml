@@ -1,8 +1,9 @@
 camera:
-  source: "../test/test_videos/crowd2.mp4"
+  source: "D:/IOT_EL/backend/test/test_videos/crowd3.mp4"
   resolution: [540, 960]
 
 detection:
+  backend: "yolo"
   model_path: "yolov8n-head.pt"  # Custom head-detection model to track highly occluded crowds
   confidence: 0.05
   imgsz: 1280
@@ -21,7 +22,7 @@ risk:
 
 mqtt:
   broker: "broker.hivemq.com"
-  port: 8000
+  port: 1883
   topics:
     metrics: "oracle_rohan_123/node1/metrics"
     heatmap: "oracle_rohan_123/node1/heatmap"

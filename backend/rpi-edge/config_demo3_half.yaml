@@ -3,6 +3,7 @@ camera:
   resolution: [540, 960]
 
 detection:
+  backend: "yolo"
   model_path: "yolov8s.pt"  # Use standard YOLOv8s for full-body view
   confidence: 0.15         # Tuned lower to capture occluded bodies
   imgsz: 960               # High resolution to capture small, distant bodies
@@ -21,7 +22,7 @@ risk:
 
 mqtt:
   broker: "broker.hivemq.com"
-  port: 8000
+  port: 1883
   topics:
     metrics: "oracle_rohan_123/node1/metrics"
     heatmap: "oracle_rohan_123/node1/heatmap"
