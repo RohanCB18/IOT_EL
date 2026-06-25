@@ -146,17 +146,22 @@ def _annotate_hud(canvas, count: int, density: float, level: str,
 # Main loop
 # ---------------------------------------------------------------------------
 
-def run(config_path: str = "config.yaml", show_display: bool = True):
+def _run_profile(config_path: str, profile: str, show_display: bool) -> str:
     cfg    = _load_config(config_path)
-    source = cfg["camera"]["source"]
+    if "profiles" in cfg:
+        p = profile if profile in cfg["profiles"] else "0"
+        profile_cfg = cfg["profiles"][p]
+    else:
+        profile_cfg = cfg
+    source = profile_cfg["camera"]["source"]
 
     # ---- Instantiate pipeline components -----------------------------------
-    detector = PersonDetector(config_path)
+    detector = PersonDetector(config_path, profile=profile)
     print(f"[INFO] ✓ Detector: {detector.backend_name}  |  Device: {detector.device.upper()}")
-    mapper   = DensityMapper(config_path)
+    mapper   = DensityMapper(config_path, profile=profile)
     flow_analyser = OpticalFlowAnalyser()
-    engine   = RiskEngine(config_path)
-    mqtt_pub = MQTTPublisher(config_path)
+    engine   = RiskEngine(config_path, profile=profile)
+    mqtt_pub = MQTTPublisher(config_path, profile=profile)
 
     # ---- Connect MQTT (non-blocking) ---------------------------------------
     mqtt_pub.connect()
@@ -199,7 +204,7 @@ def run(config_path: str = "config.yaml", show_display: bool = True):
                 fps_display = len(_frame_times) / sum(_frame_times)
 
             # Resize frame to configured resolution for high performance and proper window sizing
-            res = cfg["camera"].get("resolution")
+            res = profile_cfg["camera"].get("resolution")
             if res and isinstance(res, list) and len(res) == 2:
                 frame = cv2.resize(frame, (res[0], res[1]))
 
@@ -301,14 +306,18 @@ def run(config_path: str = "config.yaml", show_display: bool = True):
             # ---- Display (optional) ----------------------------------------
             if show_display:
                 cv2.imshow("Oracle - Crowd Safety Pipeline", canvas)
-                if cv2.waitKey(1) & 0xFF == ord('q'):
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord('q'):
                     print("[INFO] Quit requested.")
-                    break
+                    return "QUIT"
+                elif key in [ord('0'), ord('1'), ord('2'), ord('3')]:
+                    return chr(key)
 
             frame_idx += 1
 
     except KeyboardInterrupt:
         print("\n[INFO] Interrupted by user.")
+        return "QUIT"
 
     finally:
         cap.release()
@@ -316,6 +325,16 @@ def run(config_path: str = "config.yaml", show_display: bool = True):
             cv2.destroyAllWindows()
         mqtt_pub.disconnect()
         print("[INFO] Pipeline shut down cleanly.")
+
+
+def run(config_path: str = "config.yaml", show_display: bool = True):
+    current_profile = "0"
+    while True:
+        print(f"\n[INFO] Starting profile: {current_profile}")
+        next_action = _run_profile(config_path, current_profile, show_display)
+        if next_action == "QUIT" or next_action is None:
+            break
+        current_profile = next_action
 
 
 if __name__ == "__main__":

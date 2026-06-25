@@ -36,9 +36,15 @@ class RiskEngine:
     negative divergence (crowd compressing) raises risk.
     """
 
-    def __init__(self, config_path: str = "config.yaml"):
+    def __init__(self, config_path: str = "config.yaml", profile: str = None):
         with open(config_path, "r") as f:
-            cfg = yaml.safe_load(f)["risk"]
+            full_cfg = yaml.safe_load(f)
+            
+        if "profiles" in full_cfg:
+            p = profile if profile and profile in full_cfg["profiles"] else "0"
+            cfg = full_cfg["profiles"][p]["risk"]
+        else:
+            cfg = full_cfg["risk"]
 
         self.weights            = cfg["weights"]          # [w_density, w_speed, w_compression, w_chaos]
         self.warning_threshold  = cfg["warning_threshold"]

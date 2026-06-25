@@ -1,44 +1,128 @@
-camera:
-  source: 0  # 0 = webcam, or "test_videos/crowd.mp4"
-  resolution: [640, 480]
+profiles:
+  "0": # Webcam
+    camera:
+      source: 0
+      resolution: [640, 480]
+    detection:
+      backend: "peoplenet"
+      peoplenet_model_path: "models/resnet34_peoplenet.onnx"
+      peoplenet_confidence: 0.40
+      peoplenet_nms: 0.50
+      model_path: "yolov8s.pt"
+      confidence: 0.15
+      imgsz: 640
+    density:
+      eps: 50
+      min_samples: 3
+      pixels_per_meter: 100
+      sigma: 30
+    risk:
+      weights: [0.40, 0.20, 0.25, 0.15]
+      warning_threshold: 0.45
+      critical_threshold: 0.65
+      window_size: 10
+      smoothing_alpha: 0.2
+      hysteresis_margin: 0.05
+      actuator_cooldown_s: 5.0
+    mqtt:
+      broker: "broker.hivemq.com"
+      port: 1883
+      topics:
+        metrics: "oracle_rohan_123/node1/metrics"
+        heatmap: "oracle_rohan_123/node1/heatmap"
+        actuation: "oracle_rohan_123/node1/actuation"
+        alert: "oracle_rohan_123/node1/alert"
+        camera: "oracle_rohan_123/node1/camera"
 
-detection:
-  # ── Backend selector ──────────────────────────────────────────────────────
-  # "peoplenet" → NVIDIA PeopleNet ONNX (default, recommended — faster + more accurate)
-  # "yolo"      → YOLOv8 via ultralytics (fallback — change here to switch)
-  backend: "peoplenet"
+  "1": # Open (demo1)
+    camera:
+      source: "../test/test_videos/crowd1.mp4"
+      resolution: [960, 540]
+    detection:
+      backend: "yolo"
+      model_path: "yolov8s.pt"
+      confidence: 0.35
+      imgsz: 640
+    density:
+      eps: 50
+      min_samples: 3
+      pixels_per_meter: 100
+      sigma: 30
+    risk:
+      weights: [0.40, 0.20, 0.25, 0.15]
+      warning_threshold: 0.55
+      critical_threshold: 0.75
+      window_size: 10
+    mqtt:
+      broker: "broker.hivemq.com"
+      port: 1883
+      topics:
+        metrics: "oracle_rohan_123/node1/metrics"
+        heatmap: "oracle_rohan_123/node1/heatmap"
+        actuation: "oracle_rohan_123/node1/actuation"
+        alert: "oracle_rohan_123/node1/alert"
+        camera: "oracle_rohan_123/node1/camera"
 
-  # ── PeopleNet settings (active when backend = "peoplenet") ───────────────
-  peoplenet_model_path: "models/resnet34_peoplenet.onnx"
-  peoplenet_confidence: 0.40   # higher threshold = cleaner results
-  peoplenet_nms: 0.50          # NMS IoU threshold
+  "2": # Half closed (demo3)
+    camera:
+      source: "../test/test_videos/crowd.mp4"
+      resolution: [960, 540]
+    detection:
+      backend: "peoplenet"
+      peoplenet_model_path: "models/resnet34_peoplenet.onnx"
+      peoplenet_confidence: 0.40
+      peoplenet_nms: 0.50
+      model_path: "yolov8s.pt"
+      confidence: 0.15
+      imgsz: 640
+    density:
+      eps: 50
+      min_samples: 3
+      pixels_per_meter: 100
+      sigma: 30
+    risk:
+      weights: [0.40, 0.20, 0.25, 0.15]
+      warning_threshold: 0.40
+      critical_threshold: 0.65
+      window_size: 10
+      smoothing_alpha: 0.2
+      hysteresis_margin: 0.05
+      actuator_cooldown_s: 5.0
+    mqtt:
+      broker: "broker.hivemq.com"
+      port: 1883
+      topics:
+        metrics: "oracle_rohan_123/node1/metrics"
+        heatmap: "oracle_rohan_123/node1/heatmap"
+        actuation: "oracle_rohan_123/node1/actuation"
+        alert: "oracle_rohan_123/node1/alert"
+        camera: "oracle_rohan_123/node1/camera"
 
-  # ── YOLOv8 settings (active when backend = "yolo") ───────────────────────
-  model_path: "yolov8s.pt"
-  confidence: 0.15
-  imgsz: 640
-
-density:
-  eps: 50
-  min_samples: 3
-  pixels_per_meter: 100
-  sigma: 30
-
-risk:
-  weights: [0.40, 0.20, 0.25, 0.15] # density, speed, compression, chaos
-  warning_threshold: 0.45
-  critical_threshold: 0.65
-  window_size: 10
-  smoothing_alpha: 0.2
-  hysteresis_margin: 0.05
-  actuator_cooldown_s: 5.0
-
-mqtt:
-  broker: "broker.hivemq.com"
-  port: 1883
-  topics:
-    metrics: "oracle_rohan_123/node1/metrics"
-    heatmap: "oracle_rohan_123/node1/heatmap"
-    actuation: "oracle_rohan_123/node1/actuation"
-    alert: "oracle_rohan_123/node1/alert"
-    camera: "oracle_rohan_123/node1/camera"
+  "3": # Closed (demo2)
+    camera:
+      source: "D:/IOT_EL/backend/test/test_videos/crowd3.mp4"
+      resolution: [540, 960]
+    detection:
+      backend: "yolo"
+      model_path: "yolov8n-head.pt"
+      confidence: 0.05
+      imgsz: 1280
+    density:
+      eps: 50
+      min_samples: 3
+      pixels_per_meter: 120
+      sigma: 30
+    risk:
+      weights: [0.40, 0.20, 0.25, 0.15]
+      warning_threshold: 0.25
+      critical_threshold: 0.55
+      window_size: 10
+    mqtt:
+      broker: "broker.hivemq.com"
+      port: 1883
+      topics:
+        metrics: "oracle_rohan_123/node1/metrics"
+        heatmap: "oracle_rohan_123/node1/heatmap"
+        actuation: "oracle_rohan_123/node1/actuation"
+        alert: "oracle_rohan_123/node1/alert"
+        camera: "oracle_rohan_123/node1/camera"

@@ -20,9 +20,15 @@ class DensityMapper:
     LOS_WARNING  = 5.0   # 3.5–5.0 → Warning (orange)
     # ≥ 5.0 → Critical (red)
 
-    def __init__(self, config_path="config.yaml"):
+    def __init__(self, config_path="config.yaml", profile: str = None):
         with open(config_path, "r") as f:
-            cfg = yaml.safe_load(f)["density"]
+            full_cfg = yaml.safe_load(f)
+            
+        if "profiles" in full_cfg:
+            p = profile if profile and profile in full_cfg["profiles"] else "0"
+            cfg = full_cfg["profiles"][p]["density"]
+        else:
+            cfg = full_cfg["density"]
 
         self.eps             = cfg["eps"]             # DBSCAN neighbourhood radius (pixels)
         self.min_samples     = cfg["min_samples"]     # minimum points to form a cluster

@@ -213,9 +213,15 @@ class PersonDetector:
         vis              = detector.draw_detections(frame, centroids, boxes)
     """
 
-    def __init__(self, config_path: str = "config.yaml"):
+    def __init__(self, config_path: str = "config.yaml", profile: str = None):
         with open(config_path, "r") as f:
-            cfg = yaml.safe_load(f)["detection"]
+            full_cfg = yaml.safe_load(f)
+            
+        if "profiles" in full_cfg:
+            p = profile if profile and profile in full_cfg["profiles"] else "0"
+            cfg = full_cfg["profiles"][p]["detection"]
+        else:
+            cfg = full_cfg["detection"]
 
         backend_key = cfg.get("backend", "peoplenet").lower().strip()
 
