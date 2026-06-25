@@ -1,24 +1,37 @@
 camera:
-  source: "../test/test_videos/crowd.mp4"
-  resolution: [540, 960]
+  source: "../test/test_videos/crowd.mp4"  # 0 = webcam, or "test_videos/crowd.mp4"
+  resolution: [960, 540]
 
 detection:
-  backend: "yolo"
-  model_path: "yolov8s.pt"  # Use standard YOLOv8s for full-body view
-  confidence: 0.15         # Tuned lower to capture occluded bodies
-  imgsz: 960               # High resolution to capture small, distant bodies
+  # ── Backend selector ──────────────────────────────────────────────────────
+  # "peoplenet" → NVIDIA PeopleNet ONNX (default, recommended — faster + more accurate)
+  # "yolo"      → YOLOv8 via ultralytics (fallback — change here to switch)
+  backend: "peoplenet"
+
+  # ── PeopleNet settings (active when backend = "peoplenet") ───────────────
+  peoplenet_model_path: "models/resnet34_peoplenet.onnx"
+  peoplenet_confidence: 0.40   # higher threshold = cleaner results
+  peoplenet_nms: 0.50          # NMS IoU threshold
+
+  # ── YOLOv8 settings (active when backend = "yolo") ───────────────────────
+  model_path: "yolov8s.pt"
+  confidence: 0.15
+  imgsz: 640
 
 density:
   eps: 50
   min_samples: 3
-  pixels_per_meter: 180    # Calibrated to place density at caution/warning levels
+  pixels_per_meter: 100
   sigma: 30
 
 risk:
-  weights: [0.45, 0.15, 0.25, 0.15]
-  warning_threshold: 0.25   # Warning starts at 0.25
-  critical_threshold: 0.60  # Critical starts at 0.60 (keeping the gate at HALF for this crowd)
+  weights: [0.40, 0.20, 0.25, 0.15] # density, speed, compression, chaos
+  warning_threshold: 0.40
+  critical_threshold: 0.65
   window_size: 10
+  smoothing_alpha: 0.2
+  hysteresis_margin: 0.05
+  actuator_cooldown_s: 5.0
 
 mqtt:
   broker: "broker.hivemq.com"

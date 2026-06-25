@@ -3,11 +3,14 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <ESP32Servo.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 
 // --- Configuration ---
 // Wi-Fi settings (change to match your lab/home network)
-const char* ssid     = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
+const char* ssid     = "NothingPhone2";
+const char* password = "Asitis@123";
 
 // MQTT settings
 const char* mqtt_server = "broker.hivemq.com";
@@ -16,24 +19,36 @@ const char* mqtt_topic  = "oracle_rohan_123/node1/actuation";
 const char* client_id   = "esp32-actuator";
 
 // --- GPIO Pin Mappings ---
-const int SERVO_PIN  = 13;
-const int LED_PIN    = 25; // Single LED indicator
-const int BUZZER_PIN = 14;
+const int SERVO_PIN      = 13;
+const int GREEN_LED_PIN  = 25;
+const int YELLOW_LED_PIN = 26;
+const int RED_LED_PIN    = 27;
+const int BUZZER_PIN     = 14;
+
+// --- OLED Settings ---
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET    -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // --- Global Objects ---
 WiFiClient espClient;
 PubSubClient client(espClient);
 Servo myServo;
 
-// --- State Machine for Single LED ---
+// --- Servo Movement State ---
+int targetServoAngle = 0;
+int currentServoAngle = 0;
+unsigned long lastServoUpdateTime = 0;
+const unsigned long SERVO_UPDATE_INTERVAL = 15; // time in ms per 1 degree step (lower = faster, higher = slower)
+
+// --- State Machine ---
 enum GateState {
     STATE_OPEN,
     STATE_HALF,
     STATE_CLOSE
 };
-GateState currentGateState = STATE_OPEN;
-unsigned long lastBlinkTime = 0;
-bool ledState = false;
+GateState currentGateState = STATE_CLOSE;
 
 // --- Function Declarations ---
 void setupWiFi();
@@ -41,6 +56,8 @@ void connectMQTT();
 void callback(char* topic, byte* payload, unsigned int length);
 void handleGateActuation(const char* command);
 void updateLED();
+void updateServo();
+void updateDisplay(String text);
 
 void setup() {
     Serial.begin(115200);
@@ -50,12 +67,25 @@ void setup() {
     Serial.println("====================================");
 
     // Pin Modes
-    pinMode(LED_PIN, OUTPUT);
+    pinMode(GREEN_LED_PIN, OUTPUT);
+    pinMode(YELLOW_LED_PIN, OUTPUT);
+    pinMode(RED_LED_PIN, OUTPUT);
     pinMode(BUZZER_PIN, OUTPUT);
 
-    // Initial State: LED off, buzzer off
-    digitalWrite(LED_PIN, LOW);
+    // Initial State: LEDs off, buzzer off
+    digitalWrite(GREEN_LED_PIN, LOW);
+    digitalWrite(YELLOW_LED_PIN, LOW);
+    digitalWrite(RED_LED_PIN, LOW);
     digitalWrite(BUZZER_PIN, LOW);
+
+    // OLED Initialization
+    if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+        Serial.println(F("SSD1306 allocation failed"));
+    } else {
+        display.clearDisplay();
+        display.display();
+    }
+    updateDisplay("BOOTING...");
 
     // Allow allocation of all timers for servo
     ESP32PWM::allocateTimer(0);
@@ -67,11 +97,15 @@ void setup() {
     myServo.setPeriodHertz(50);
     myServo.attach(SERVO_PIN, 500, 2400);
     
-    // Set initial servo position to OPEN (0 degrees)
+    // Set initial servo position to CLOSED (0 degrees)
     myServo.write(0);
-    currentGateState = STATE_OPEN;
-    digitalWrite(LED_PIN, HIGH); // Default safe state: LED solidly ON
-    Serial.println("[SYSTEM] Initialised gate: OPEN (0 degrees), Single LED active.");
+    currentServoAngle = 0;
+    targetServoAngle = 0;
+    currentGateState = STATE_CLOSE;
+    updateLED();
+    
+    Serial.println("[SYSTEM] Initialised gate: CLOSED (0 degrees).");
+    updateDisplay("CLOSED");
 
     setupWiFi();
     client.setServer(mqtt_server, mqtt_port);
@@ -86,6 +120,7 @@ void loop() {
         connectMQTT();
     }
     client.loop();
+    updateServo();
     updateLED();
     delay(10); // yields to background RTOS tasks
 }
@@ -95,6 +130,7 @@ void setupWiFi() {
 
     Serial.print("[WIFI] Connecting to SSID: ");
     Serial.println(ssid);
+    updateDisplay("WiFi...");
     
     WiFi.begin(ssid, password);
     
@@ -109,8 +145,15 @@ void setupWiFi() {
         Serial.println("\n[WIFI] Connected successfully!");
         Serial.print("[WIFI] IP Address: ");
         Serial.println(WiFi.localIP());
+        updateDisplay("WiFi OK");
+        delay(1000);
+        // Restore display state based on gate
+        if (currentGateState == STATE_OPEN) updateDisplay("OPEN");
+        else if (currentGateState == STATE_HALF) updateDisplay("HALF OPEN");
+        else updateDisplay("CLOSED");
     } else {
         Serial.println("\n[WIFI] Failed to connect. Will retry in loop.");
+        updateDisplay("WiFi Fail");
     }
 }
 
@@ -119,16 +162,22 @@ void connectMQTT() {
         Serial.print("[MQTT] Connecting to broker at ");
         Serial.print(mqtt_server);
         Serial.print("...");
+        updateDisplay("MQTT...");
         
         if (client.connect(client_id)) {
             Serial.println(" Connected!");
             client.subscribe(mqtt_topic);
             Serial.print("[MQTT] Subscribed to topic: ");
             Serial.println(mqtt_topic);
+            // Restore display state
+            if (currentGateState == STATE_OPEN) updateDisplay("OPEN");
+            else if (currentGateState == STATE_HALF) updateDisplay("HALF OPEN");
+            else updateDisplay("CLOSED");
         } else {
             Serial.print(" Failed, rc=");
             Serial.print(client.state());
             Serial.println(". Retrying in 5 seconds...");
+            updateDisplay("MQTT Fail");
             delay(5000);
         }
     }
@@ -170,22 +219,25 @@ void handleGateActuation(const char* command) {
     Serial.println(command);
 
     if (strcmp(command, "GATE_OPEN") == 0) {
-        myServo.write(0);
+        targetServoAngle = 90; // 90 is fully open
         digitalWrite(BUZZER_PIN, LOW);
         currentGateState = STATE_OPEN;
-        Serial.println("[ACTUATOR] Gate is OPEN (0°). LED Solidly ON. Buzzer OFF.");
+        Serial.println("[ACTUATOR] Target set to OPEN (90°). Green LED ON.");
+        updateDisplay("OPEN");
     } 
     else if (strcmp(command, "GATE_HALF") == 0) {
-        myServo.write(90);
+        targetServoAngle = 45; // 45 is half open
         digitalWrite(BUZZER_PIN, LOW);
         currentGateState = STATE_HALF;
-        Serial.println("[ACTUATOR] Gate is HALF-OPEN (90°). LED Blinking Slowly. Buzzer OFF.");
+        Serial.println("[ACTUATOR] Target set to HALF-OPEN (45°). Yellow LED ON.");
+        updateDisplay("HALF OPEN");
     } 
     else if (strcmp(command, "GATE_CLOSE") == 0) {
-        myServo.write(180);
+        targetServoAngle = 0; // 0 is closed
         digitalWrite(BUZZER_PIN, HIGH);
         currentGateState = STATE_CLOSE;
-        Serial.println("[ACTUATOR] Gate is CLOSED (180°). LED Blinking Rapidly. Buzzer sounding!");
+        Serial.println("[ACTUATOR] Target set to CLOSED (0°). Red LED ON, Buzzer ON!");
+        updateDisplay("CLOSED");
     } 
     else {
         Serial.print("[ACTUATOR] Unknown command received: ");
@@ -194,25 +246,32 @@ void handleGateActuation(const char* command) {
 }
 
 void updateLED() {
+    digitalWrite(GREEN_LED_PIN, currentGateState == STATE_OPEN ? HIGH : LOW);
+    digitalWrite(YELLOW_LED_PIN, currentGateState == STATE_HALF ? HIGH : LOW);
+    digitalWrite(RED_LED_PIN, currentGateState == STATE_CLOSE ? HIGH : LOW);
+}
+
+void updateServo() {
+    if (currentServoAngle == targetServoAngle) return;
+
     unsigned long currentMillis = millis();
-    if (currentGateState == STATE_OPEN) {
-        // Keep LED solidly ON
-        digitalWrite(LED_PIN, HIGH);
-    } 
-    else if (currentGateState == STATE_HALF) {
-        // Slow blink: 500ms intervals
-        if (currentMillis - lastBlinkTime >= 500) {
-            lastBlinkTime = currentMillis;
-            ledState = !ledState;
-            digitalWrite(LED_PIN, ledState);
-        }
-    } 
-    else if (currentGateState == STATE_CLOSE) {
-        // Rapid blink: 150ms intervals
-        if (currentMillis - lastBlinkTime >= 150) {
-            lastBlinkTime = currentMillis;
-            ledState = !ledState;
-            digitalWrite(LED_PIN, ledState);
-        }
+    if (currentMillis - lastServoUpdateTime >= SERVO_UPDATE_INTERVAL) {
+        lastServoUpdateTime = currentMillis;
+        int step = (targetServoAngle > currentServoAngle) ? 1 : -1;
+        currentServoAngle += step;
+        myServo.write(currentServoAngle);
     }
+}
+
+void updateDisplay(String text) {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    display.println("Gate Status:");
+    
+    display.setCursor(0, 20);
+    display.setTextSize(2);
+    display.println(text);
+    display.display();
 }

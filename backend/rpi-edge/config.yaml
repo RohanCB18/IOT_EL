@@ -1,5 +1,5 @@
 camera:
-  source: "D:/IOT_EL/backend/test/test_videos/crowd.mp4"  # 0 = webcam, or "test_videos/crowd.mp4"
+  source: 0  # 0 = webcam, or "test_videos/crowd.mp4"
   resolution: [640, 480]
 
 detection:
