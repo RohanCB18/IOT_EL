@@ -48,7 +48,16 @@ enum GateState {
     STATE_HALF,
     STATE_CLOSE
 };
-GateState currentGateState = STATE_CLOSE;
+GateState currentGateState = STATE_OPEN;
+
+// --- Display State ---
+String currentDisplayText = "BOOTING...";
+unsigned long lastDisplayTime = 0;
+
+// --- Buzzer State ---
+unsigned long lastBuzzerTime = 0;
+bool buzzerState = false;
+const unsigned long BUZZER_INTERVAL = 500; // 500ms on/off
 
 // --- Function Declarations ---
 void setupWiFi();
@@ -56,8 +65,10 @@ void connectMQTT();
 void callback(char* topic, byte* payload, unsigned int length);
 void handleGateActuation(const char* command);
 void updateLED();
+void updateBuzzer();
 void updateServo();
 void updateDisplay(String text);
+void refreshDisplay();
 
 void setup() {
     Serial.begin(115200);
@@ -97,15 +108,15 @@ void setup() {
     myServo.setPeriodHertz(50);
     myServo.attach(SERVO_PIN, 500, 2400);
     
-    // Set initial servo position to CLOSED (0 degrees)
-    myServo.write(0);
-    currentServoAngle = 0;
-    targetServoAngle = 0;
-    currentGateState = STATE_CLOSE;
+    // Set initial servo position to OPEN (90 degrees)
+    myServo.write(90);
+    currentServoAngle = 90;
+    targetServoAngle = 90;
+    currentGateState = STATE_OPEN;
     updateLED();
     
-    Serial.println("[SYSTEM] Initialised gate: CLOSED (0 degrees).");
-    updateDisplay("CLOSED");
+    Serial.println("[SYSTEM] Initialised gate: OPEN (90 degrees).");
+    updateDisplay("OPEN");
 
     setupWiFi();
     client.setServer(mqtt_server, mqtt_port);
@@ -122,6 +133,14 @@ void loop() {
     client.loop();
     updateServo();
     updateLED();
+    updateBuzzer();
+    
+    unsigned long currentMillis = millis();
+    if (currentMillis - lastDisplayTime >= 1000) {
+        lastDisplayTime = currentMillis;
+        refreshDisplay();
+    }
+    
     delay(10); // yields to background RTOS tasks
 }
 
@@ -220,21 +239,18 @@ void handleGateActuation(const char* command) {
 
     if (strcmp(command, "GATE_OPEN") == 0) {
         targetServoAngle = 90; // 90 is fully open
-        digitalWrite(BUZZER_PIN, LOW);
         currentGateState = STATE_OPEN;
         Serial.println("[ACTUATOR] Target set to OPEN (90°). Green LED ON.");
         updateDisplay("OPEN");
     } 
     else if (strcmp(command, "GATE_HALF") == 0) {
         targetServoAngle = 45; // 45 is half open
-        digitalWrite(BUZZER_PIN, LOW);
         currentGateState = STATE_HALF;
         Serial.println("[ACTUATOR] Target set to HALF-OPEN (45°). Yellow LED ON.");
         updateDisplay("HALF OPEN");
     } 
     else if (strcmp(command, "GATE_CLOSE") == 0) {
         targetServoAngle = 0; // 0 is closed
-        digitalWrite(BUZZER_PIN, HIGH);
         currentGateState = STATE_CLOSE;
         Serial.println("[ACTUATOR] Target set to CLOSED (0°). Red LED ON, Buzzer ON!");
         updateDisplay("CLOSED");
@@ -251,6 +267,20 @@ void updateLED() {
     digitalWrite(RED_LED_PIN, currentGateState == STATE_CLOSE ? HIGH : LOW);
 }
 
+void updateBuzzer() {
+    if (currentGateState == STATE_CLOSE) {
+        unsigned long currentMillis = millis();
+        if (currentMillis - lastBuzzerTime >= BUZZER_INTERVAL) {
+            lastBuzzerTime = currentMillis;
+            buzzerState = !buzzerState;
+            digitalWrite(BUZZER_PIN, buzzerState ? HIGH : LOW);
+        }
+    } else {
+        digitalWrite(BUZZER_PIN, LOW);
+        buzzerState = false;
+    }
+}
+
 void updateServo() {
     if (currentServoAngle == targetServoAngle) return;
 
@@ -264,14 +294,37 @@ void updateServo() {
 }
 
 void updateDisplay(String text) {
+    currentDisplayText = text;
+    refreshDisplay();
+}
+
+void refreshDisplay() {
     display.clearDisplay();
+    
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(0, 0);
     display.println("Gate Status:");
     
-    display.setCursor(0, 20);
+    display.setCursor(0, 16);
     display.setTextSize(2);
-    display.println(text);
+    display.println(currentDisplayText);
+    
+    // Uptime
+    unsigned long uptimeSec = millis() / 1000;
+    int mins = (uptimeSec / 60) % 60;
+    int hrs = (uptimeSec / 3600);
+    int secs = uptimeSec % 60;
+    char uptimeStr[20];
+    if (hrs > 0) {
+        sprintf(uptimeStr, "Up: %dh %02dm %02ds", hrs, mins, secs);
+    } else {
+        sprintf(uptimeStr, "Up: %02dm %02ds", mins, secs);
+    }
+    
+    display.setCursor(0, 48);
+    display.setTextSize(1);
+    display.println(uptimeStr);
+    
     display.display();
 }
