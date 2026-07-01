@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <ESP32Servo.h>
@@ -13,10 +14,12 @@ const char* ssid     = "NothingPhone2";
 const char* password = "Asitis@123";
 
 // MQTT settings
-const char* mqtt_server = "broker.hivemq.com";
-const int mqtt_port     = 1883;
-const char* mqtt_topic  = "oracle_rohan_123/node1/actuation";
-const char* client_id   = "esp32-actuator";
+const char* mqtt_server   = "ef2d24edcf5c48c1b545f8200582e03b.s1.eu.hivemq.cloud";
+const int mqtt_port       = 8883;
+const char* mqtt_username = "oracle_node";
+const char* mqtt_password = "Hello@123";
+const char* mqtt_topic    = "oracle_rohan_123/node1/actuation";
+const char* client_id     = "esp32-actuator";
 
 // --- GPIO Pin Mappings ---
 const int SERVO_PIN      = 13;
@@ -32,7 +35,7 @@ const int BUZZER_PIN     = 14;
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // --- Global Objects ---
-WiFiClient espClient;
+WiFiClientSecure espClient;
 PubSubClient client(espClient);
 Servo myServo;
 
@@ -119,6 +122,7 @@ void setup() {
     updateDisplay("OPEN");
 
     setupWiFi();
+    espClient.setInsecure(); // Skip certificate verification for development
     client.setServer(mqtt_server, mqtt_port);
     client.setCallback(callback);
 }
@@ -183,7 +187,7 @@ void connectMQTT() {
         Serial.print("...");
         updateDisplay("MQTT...");
         
-        if (client.connect(client_id)) {
+        if (client.connect(client_id, mqtt_username, mqtt_password)) {
             Serial.println(" Connected!");
             client.subscribe(mqtt_topic);
             Serial.print("[MQTT] Subscribed to topic: ");

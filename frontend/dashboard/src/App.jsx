@@ -20,7 +20,13 @@ function ConnectionBadge({ connected }) {
 }
 
 export default function App() {
-  const { connected, metrics, heatmapB64, cameraB64, actuation, alerts, trendData, flowData } = useMqtt();
+  const { connected, metrics, heatmapB64, cameraB64, actuation, alerts, trendData, flowData } = useMqtt(
+    'wss://ef2d24edcf5c48c1b545f8200582e03b.s1.eu.hivemq.cloud:8884/mqtt',
+    {
+      username: 'oracle_node',
+      password: 'Hello@123',
+    }
+  );
   const [time, setTime] = useState(new Date());
 
   useEffect(() => {

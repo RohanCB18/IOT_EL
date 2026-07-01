@@ -18,7 +18,7 @@ const DEFAULT_METRICS = {
 
 const DEFAULT_ACTUATION = { command: 'GATE_OPEN', timestamp: null };
 
-export function useMqtt(brokerUrl = BROKER_URL) {
+export function useMqtt(brokerUrl = BROKER_URL, options = {}) {
   const clientRef = useRef(null);
 
   const [connected,  setConnected]  = useState(false);
@@ -42,6 +42,7 @@ export function useMqtt(brokerUrl = BROKER_URL) {
       reconnectPeriod: 3000,
       connectTimeout:  10000,
       protocolVersion: 4,
+      ...options
     });
     clientRef.current = client;
 

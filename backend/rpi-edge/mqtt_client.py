@@ -30,11 +30,22 @@ class MQTTPublisher:
         self.broker  = cfg["broker"]
         self.port    = cfg["port"]
         self.topics  = cfg["topics"]
+        self.username = cfg.get("username", None)
+        self.password = cfg.get("password", None)
+        self.use_tls  = cfg.get("use_tls", False)
 
-        transport = "websockets" if self.port == 8000 else "tcp"
+        transport = "websockets" if self.port in [8000, 8884] else "tcp"
         self._client = mqtt.Client(client_id="oracle-pipeline", protocol=mqtt.MQTTv311, transport=transport)
         if transport == "websockets":
             self._client.ws_set_options(path="/mqtt")
+            
+        if self.use_tls:
+            import ssl
+            self._client.tls_set(tls_version=ssl.PROTOCOL_TLS_CLIENT)
+            
+        if self.username and self.password:
+            self._client.username_pw_set(self.username, self.password)
+
         self._client.on_connect    = self._on_connect
         self._client.on_disconnect = self._on_disconnect
         self._client.on_publish    = self._on_publish

@@ -25,8 +25,11 @@ profiles:
       hysteresis_margin: 0.05
       actuator_cooldown_s: 5.0
     mqtt:
-      broker: "broker.hivemq.com"
-      port: 1883
+      broker: "ef2d24edcf5c48c1b545f8200582e03b.s1.eu.hivemq.cloud"
+      port: 8883
+      use_tls: true
+      username: "oracle_node"
+      password: "Hello@123"
       topics:
         metrics: "oracle_rohan_123/node1/metrics"
         heatmap: "oracle_rohan_123/node1/heatmap"
@@ -50,12 +53,15 @@ profiles:
       sigma: 30
     risk:
       weights: [0.40, 0.20, 0.25, 0.15]
-      warning_threshold: 0.55
-      critical_threshold: 0.75
+      warning_threshold: 0.45
+      critical_threshold: 0.55
       window_size: 10
     mqtt:
-      broker: "broker.hivemq.com"
-      port: 1883
+      broker: "ef2d24edcf5c48c1b545f8200582e03b.s1.eu.hivemq.cloud"
+      port: 8883
+      use_tls: true
+      username: "oracle_node"
+      password: "Hello@123"
       topics:
         metrics: "oracle_rohan_123/node1/metrics"
         heatmap: "oracle_rohan_123/node1/heatmap"
@@ -89,8 +95,11 @@ profiles:
       hysteresis_margin: 0.05
       actuator_cooldown_s: 5.0
     mqtt:
-      broker: "broker.hivemq.com"
-      port: 1883
+      broker: "ef2d24edcf5c48c1b545f8200582e03b.s1.eu.hivemq.cloud"
+      port: 8883
+      use_tls: true
+      username: "oracle_node"
+      password: "Hello@123"
       topics:
         metrics: "oracle_rohan_123/node1/metrics"
         heatmap: "oracle_rohan_123/node1/heatmap"
@@ -114,12 +123,15 @@ profiles:
       sigma: 30
     risk:
       weights: [0.40, 0.20, 0.25, 0.15]
-      warning_threshold: 0.25
+      warning_threshold: 0.40
       critical_threshold: 0.55
       window_size: 10
     mqtt:
-      broker: "broker.hivemq.com"
-      port: 1883
+      broker: "ef2d24edcf5c48c1b545f8200582e03b.s1.eu.hivemq.cloud"
+      port: 8883
+      use_tls: true
+      username: "oracle_node"
+      password: "Hello@123"
       topics:
         metrics: "oracle_rohan_123/node1/metrics"
         heatmap: "oracle_rohan_123/node1/heatmap"
