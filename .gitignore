@@ -30,4 +30,3 @@ Thumbs.db
 
 # Local config (contains deployment-specific broker IP — commit config.example.yaml instead)
 rpi-edge/config.yaml
-*.mp4
