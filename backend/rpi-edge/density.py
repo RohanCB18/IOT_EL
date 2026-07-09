@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 import yaml
 from sklearn.cluster import DBSCAN
-from scipy.ndimage import gaussian_filter
+
 
 
 class DensityMapper:
@@ -86,12 +86,10 @@ class DensityMapper:
         Blends the heatmap onto the frame and annotates cluster IDs,
         density value, and Level-of-Service.
 
-        Returns the annotated frame (does NOT modify the original).
+        Draws in-place on *frame* for speed (the caller passes a vis copy).
         """
-        vis = frame.copy()
-
-        # Blend heatmap
-        vis = cv2.addWeighted(vis, 1 - alpha, heatmap_bgr, alpha, 0)
+        # Blend heatmap in-place
+        vis = cv2.addWeighted(frame, 1 - alpha, heatmap_bgr, alpha, 0)
 
         # Draw cluster labels next to each centroid (only for clustered people, skipping noise to avoid clutter)
         for i, (cx, cy) in enumerate(centroids):
@@ -110,23 +108,41 @@ class DensityMapper:
 
     def _build_heatmap(self, pts, h, w):
         """
-        Splats each centroid onto a blank canvas, applies Gaussian blur,
-        normalises, and converts to a BGR colour image via COLORMAP_JET.
-        """
-        canvas = np.zeros((h, w), dtype=np.float32)
+        Splats each centroid onto a quarter-resolution canvas, applies
+        cv2.GaussianBlur (SIMD-optimised C++, ~2–5× faster than scipy),
+        then upscales and applies COLORMAP_JET.
 
+        Downsampling before the blur gives ~16× fewer pixels to process
+        with negligible visual difference on a heatmap.
+        """
+        # Quarter resolution for the blur pass
+        sh, sw = h // 4, w // 4
+        canvas = np.zeros((sh, sw), dtype=np.float32)
+
+        # Scale centroids to quarter-res and splat
+        sx = sw / w
+        sy = sh / h
         for cx, cy in pts:
-            ix, iy = int(np.clip(cx, 0, w - 1)), int(np.clip(cy, 0, h - 1))
+            ix = int(np.clip(cx * sx, 0, sw - 1))
+            iy = int(np.clip(cy * sy, 0, sh - 1))
             canvas[iy, ix] += 1.0
 
-        # Gaussian blur spreads the point masses into smooth blobs
-        blurred = gaussian_filter(canvas, sigma=self.sigma)
+        # cv2.GaussianBlur: ksize=(0,0) auto-computes from sigma.
+        # sigma is scaled to quarter-res.
+        small_sigma = max(1.0, self.sigma / 4.0)
+        # ksize must be odd; derive from sigma
+        ksize = int(6 * small_sigma) | 1   # ensure odd
+        blurred = cv2.GaussianBlur(canvas, (ksize, ksize), small_sigma)
 
         # Normalise to 0–255 for colourmap
-        if blurred.max() > 0:
-            blurred = (blurred / blurred.max() * 255).astype(np.uint8)
+        bmax = blurred.max()
+        if bmax > 0:
+            blurred = (blurred * (255.0 / bmax)).astype(np.uint8)
         else:
             blurred = blurred.astype(np.uint8)
+
+        # Upscale back to original frame size
+        blurred = cv2.resize(blurred, (w, h), interpolation=cv2.INTER_LINEAR)
 
         # Apply JET colour map: blue=sparse, red=dense
         heatmap_bgr = cv2.applyColorMap(blurred, cv2.COLORMAP_JET)

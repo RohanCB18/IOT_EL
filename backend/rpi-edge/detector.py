@@ -18,7 +18,6 @@ CUDA is used automatically for both backends when available.
 
 import cv2
 import yaml
-import torch
 import numpy as np
 from pathlib import Path
 from typing import List, Tuple
@@ -30,6 +29,15 @@ from typing import List, Tuple
 
 def _best_device() -> str:
     """Returns 'cuda' if a CUDA GPU is available, else 'cpu'."""
+    # For PeopleNet, check if ONNX Runtime has CUDA/TensorRT execution provider available.
+    try:
+        import onnxruntime as ort
+        providers = ort.get_available_providers()
+        if "CUDAExecutionProvider" in providers or "TensorrtExecutionProvider" in providers:
+            return "cuda"
+    except Exception:
+        pass
+
     return "cuda" if torch.cuda.is_available() else "cpu"
 
 
@@ -58,7 +66,7 @@ class _PeopleNetBackend:
             confidence_threshold = confidence,
             nms_threshold        = nms_thresh,
         )
-        self.device      = device
+        self.device      = self._detector.device
         self.name        = "PeopleNet"
         self._last_dets  = []   # cache for draw_detections
 
@@ -132,6 +140,7 @@ class _YOLOBackend:
     def __init__(self, cfg: dict):
         from ultralytics import YOLO
 
+        import torch
         model_path      = cfg.get("model_path", "yolov8s.pt")
         self.conf       = cfg.get("confidence", 0.25)
         self.imgsz      = cfg.get("imgsz", 640)

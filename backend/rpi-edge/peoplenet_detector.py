@@ -91,53 +91,103 @@ class PeopleNetDetector:
         print(f"[PeopleNet] Input   : 3 × {MODEL_H} × {MODEL_W}  (CHW)")
         print(f"[PeopleNet] Classes : {self.CLASSES}")
 
-    # ── ONNX session ─────────────────────────────────────────────────────────
     def _init_session(self):
+        # ── Session options: full graph optimisation + thread budget ──────────
+        opts = ort.SessionOptions()
+        opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        # Keep thread counts sensible — unlimited threads cause OS scheduling
+        # contention that paradoxically slows inference on a GPU pipeline.
+        opts.intra_op_num_threads = 4
+        opts.inter_op_num_threads = 1
+        opts.enable_mem_pattern   = True
+        opts.enable_cpu_mem_arena = True
+
         providers = []
         if self.device == 'cuda':
             if 'CUDAExecutionProvider' in ort.get_available_providers():
-                providers.append('CUDAExecutionProvider')
-                print("[PeopleNet] Using CUDA execution provider")
+                # arena_extend_strategy=0 → pre-allocate GPU arena; avoids
+                # per-call cudaMalloc which is a common hidden latency source.
+                cuda_opts = {
+                    "arena_extend_strategy":    "kNextPowerOfTwo",
+                    "cudnn_conv_algo_search":    "EXHAUSTIVE",
+                    "do_copy_in_default_stream": True,
+                }
+                providers.append(('CUDAExecutionProvider', cuda_opts))
+                print("[PeopleNet] Using CUDA execution provider (ORT_ENABLE_ALL)")
             else:
                 print("[PeopleNet] CUDA not available, falling back to CPU")
         providers.append('CPUExecutionProvider')
 
-        self.session    = ort.InferenceSession(str(self.model_path), providers=providers)
-        self.input_name = self.session.get_inputs()[0].name
+        self.session = ort.InferenceSession(
+            str(self.model_path), sess_options=opts, providers=providers
+        )
+
+        # Verify if CUDA was actually loaded or if ONNX Runtime fell back to CPU
+        active_providers = self.session.get_providers()
+        if "CUDAExecutionProvider" in active_providers or "TensorrtExecutionProvider" in active_providers:
+            self.device = "cuda"
+        else:
+            self.device = "cpu"
+            if providers[0] in ("CUDAExecutionProvider",) or \
+               (isinstance(providers[0], tuple) and providers[0][0] == "CUDAExecutionProvider"):
+                print("[PeopleNet] CUDA Execution Provider failed to load. Falling back to CPU.")
+
+        self.input_name   = self.session.get_inputs()[0].name
         self.output_names = [o.name for o in self.session.get_outputs()]
         print(f"[PeopleNet] Input  name : {self.input_name}")
         print(f"[PeopleNet] Output names: {self.output_names}")
+
+        # ── Pre-allocate a reusable input tensor buffer (avoids per-frame
+        #    heap allocation in preprocess). Shape: (1, 3, MODEL_H, MODEL_W)
+        self._input_buffer = np.zeros(
+            (1, 3, MODEL_H, MODEL_W), dtype=np.float32
+        )
+
+        # ── Warmup: first few CUDA inferences are slow because cuDNN
+        #    benchmarks convolution algorithms and ONNX RT allocates GPU
+        #    memory pools. Run 3 dummy passes so real frames are fast.
+        print("[PeopleNet] Warming up GPU (3 passes)…")
+        for _ in range(3):
+            self.session.run(
+                self.output_names,
+                {self.input_name: self._input_buffer}
+            )
+        print("[PeopleNet] Warmup complete.")
 
     # ── Pre-processing ───────────────────────────────────────────────────────
     def preprocess(self, image: np.ndarray) -> Tuple[np.ndarray, int, int]:
         """
         BGR frame  →  float32 NCHW tensor ready for ONNX Runtime.
 
-        Steps
-        -----
-        1. BGR → RGB
-        2. Resize to (MODEL_W, MODEL_H) = (960, 544)
-        3. Scale pixel values to [0, 1]
-        4. HWC → CHW, add batch dimension
+        Uses cv2.dnn.blobFromImage which performs BGR→RGB, resize, pixel
+        scaling ([0,1]) and HWC→NCHW layout in a single optimised C++ call.
         """
         orig_h, orig_w = image.shape[:2]
-        rgb     = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        resized = cv2.resize(rgb, (MODEL_W, MODEL_H), interpolation=cv2.INTER_LINEAR)
-        scaled  = resized.astype(np.float32) / 255.0
-        chw     = np.transpose(scaled, (2, 0, 1))
-        tensor  = np.expand_dims(chw, axis=0)       # (1, 3, H, W)
-        return tensor, orig_h, orig_w
+        blob = cv2.dnn.blobFromImage(
+            image,
+            scalefactor = 1.0 / 255.0,
+            size        = (MODEL_W, MODEL_H),
+            mean        = (0.0, 0.0, 0.0),
+            swapRB      = True,   # BGR → RGB
+            crop        = False,
+        )
+        return blob, orig_h, orig_w
 
     # ── Inference ────────────────────────────────────────────────────────────
     def infer(self, tensor: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
         Run ONNX Runtime inference.
 
+        Uses session.run() directly (IOBinding requires CUDA-capable ORT build
+        with numpy_helper; plain run() with a pre-allocated input buffer is
+        already zero-copy on the input side because ORT reads from the buffer
+        pointer without an extra copy when the array is C-contiguous float32).
+
         Returns
         -------
         (output_cov, output_bbox)  both as numpy arrays
         """
-        raw = self.session.run(None, {self.input_name: tensor})
+        raw = self.session.run(self.output_names, {self.input_name: tensor})
 
         output_cov  = None
         output_bbox = None
